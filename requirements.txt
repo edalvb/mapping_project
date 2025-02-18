@@ -1,0 +1,2 @@
+# Estas librerías son necesarias para generar el ejecutable con PyInstaller.
+pyinstaller>=5.10.1
