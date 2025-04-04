@@ -15,6 +15,9 @@ Este proyecto consiste en un script en Python que recorre de forma recursiva un 
 - Python 3.x
 - [PyInstaller](https://www.pyinstaller.org/) (para generar el archivo ejecutable)
 - (Opcional) [auto-py-to-exe](https://pypi.org/project/auto-py-to-exe/) si deseas una interfaz gráfica para la conversión a .exe.
+- Luego ejecuta:
+  - `pyinstaller --onefile --windowed mi_script.py` o 
+  - `flet pack file_utility_app.py -n FileUtility --icon assets/app_icon.ico`
 
 ## Instalación
 
