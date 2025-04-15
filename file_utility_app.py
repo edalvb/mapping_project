@@ -3,10 +3,12 @@ import flet as ft
 import json
 from pathlib import Path # Using pathlib for more modern path handling
 import threading # Explicitly import for type hinting if needed
+import os # Needed for os.walk in _map_project_thread
 
 # --- Core Logic (separated for clarity) ---
 
-# ... (create_files_from_json_logic and _create_files_thread remain the same) ...
+# create_files_from_json_logic and _create_files_thread remain unchanged
+# ... (copy the existing create_files_from_json_logic and _create_files_thread here) ...
 def create_files_from_json_logic(base_dir, json_path, page: ft.Page, progress_ring: ft.ProgressRing, status_text: ft.Text, create_button: ft.ElevatedButton):
     """
     Reads a JSON file and creates files/directories based on its content.
@@ -41,16 +43,9 @@ def _create_files_thread(base_dir, json_path, page: ft.Page, progress_ring: ft.P
         base_dir_path = Path(base_dir)
         json_file_path = Path(json_path)
 
-        # Update UI: Show progress (already done before thread start)
-        # status_text.value = "Procesando JSON..."
-        # progress_ring.visible = True
-        # page.update() # Avoid redundant update
-
         if not base_dir_path.is_dir():
             show_dialog(page, "Error", "La ruta base seleccionada no es un directorio válido.")
             status_text.value = "Error: Ruta base inválida."
-            # progress_ring.visible = False # Handled in finally
-            # page.update() # Handled in finally
             return # Exit thread
 
         if not json_file_path.is_file():
@@ -79,9 +74,6 @@ def _create_files_thread(base_dir, json_path, page: ft.Page, progress_ring: ft.P
         page.update()
 
         for item in data:
-            # Check frequently if we should stop (e.g., page closed - Flet might handle this)
-            # if not page.running: return # Example check
-
             if not isinstance(item, dict) or "path" not in item or "content" not in item:
                 errors.append("Un objeto en el JSON no tiene 'path' o 'content'. Se omitirá.")
                 continue # Skip this item
@@ -89,20 +81,14 @@ def _create_files_thread(base_dir, json_path, page: ft.Page, progress_ring: ft.P
             relative_path_str = item["path"]
             content = item["content"]
 
-            # Construct the full path using pathlib
             try:
-                # Ensure the path is treated as relative to the base directory
-                # Prevent escaping the base directory (basic security)
                 full_path = base_dir_path.joinpath(relative_path_str).resolve()
-                # Check if the resolved path is within the base directory
                 if base_dir_path.resolve() not in full_path.parents and full_path != base_dir_path.resolve():
                      errors.append(f"Intento de escritura fuera del directorio base: '{relative_path_str}'. Se omitirá.")
                      continue
 
-                # Create parent directories if they don't exist
                 full_path.parent.mkdir(parents=True, exist_ok=True)
 
-                # Write the file content
                 with open(full_path, "w", encoding="utf-8") as archivo:
                     archivo.write(content)
 
@@ -115,43 +101,38 @@ def _create_files_thread(base_dir, json_path, page: ft.Page, progress_ring: ft.P
             except Exception as e:
                 errors.append(f"Error inesperado al procesar '{relative_path_str}': {e}")
 
-        # Final status update
         if not errors:
             status_text.value = f"¡Éxito! {processed_items} archivos creados correctamente."
             show_snackbar(page, "¡Archivos creados correctamente!")
         else:
             error_summary = f"Completado con {len(errors)} errores. {processed_items} archivos creados."
             status_text.value = error_summary
-            # Combine errors for dialog display, limit length if necessary
             error_details = "\n".join(errors[:10]) # Show first 10 errors
             if len(errors) > 10:
                 error_details += f"\n... ({len(errors) - 10} errores más)"
             show_dialog(page, "Proceso completado con errores", error_details)
 
     except Exception as e:
-        # Catch any unexpected error within the thread itself
         try:
             status_text.value = f"Error inesperado en el hilo: {e}"
             show_dialog(page, "Error Interno", f"Ocurrió un error inesperado en el proceso: {e}")
         except:
-            print(f"Error grave en el hilo, no se pudo actualizar UI: {e}") # Fallback print
+            print(f"Error grave en el hilo, no se pudo actualizar UI: {e}")
 
     finally:
-        # Ensure UI elements are reset correctly, regardless of errors
         progress_ring.visible = False
         create_button.disabled = False
         page.update()
 
 
-def map_project_logic(project_dir, extensions, output_file, page: ft.Page, progress_ring: ft.ProgressRing, status_text: ft.Text, map_button: ft.ElevatedButton):
+def map_project_logic(project_dir, extensions_to_include, extensions_to_exclude, output_file, page: ft.Page, progress_ring: ft.ProgressRing, status_text: ft.Text, map_button: ft.ElevatedButton):
     """
-    Walks a project directory, finds files with specified extensions,
+    Walks a project directory, finds files matching inclusion/exclusion criteria,
     and writes their content to a Markdown file.
     Updates UI elements for progress and status. Runs in a separate thread.
     Includes button state management.
     """
     try:
-        # Disable button, show progress before starting thread
         map_button.disabled = True
         status_text.value = "Iniciando mapeo..."
         progress_ring.visible = True
@@ -160,78 +141,92 @@ def map_project_logic(project_dir, extensions, output_file, page: ft.Page, progr
         page.run_thread(
             _map_project_thread,
             project_dir,
-            list(extensions),
+            list(extensions_to_include),  # Ensure it's a list
+            list(extensions_to_exclude), # Ensure it's a list
             output_file,
             page,
             progress_ring,
             status_text,
-            map_button  # Pass button to the thread
+            map_button
         )
     except Exception as e:
-        print(f"Error starting mapping thread: {e}")  # Keep print for debugging
+        print(f"Error starting mapping thread: {e}")
         show_dialog(page, "Error", f"Error starting mapping thread: {e}")
         status_text.value = "Error al iniciar mapeo."
         progress_ring.visible = False
-        map_button.disabled = False # Re-enable on error
+        map_button.disabled = False
         page.update()
 
-def _map_project_thread(project_dir, extensions, output_file, page: ft.Page, progress_ring: ft.ProgressRing, status_text: ft.Text, map_button: ft.ElevatedButton):
-    """Actual thread function for mapping project. Manages button state."""
+def _map_project_thread(project_dir, extensions_to_include, extensions_to_exclude, output_file, page: ft.Page, progress_ring: ft.ProgressRing, status_text: ft.Text, map_button: ft.ElevatedButton):
+    """Actual thread function for mapping project. Manages button state and exclusions."""
     try:
         project_path = Path(project_dir)
         output_path = Path(output_file)
-        extensions_set = set(ext.lower() for ext in extensions) # Lowercase for case-insensitive compare
-
-        # Update UI: Show progress (already done before thread start)
-        # status_text.value = "Iniciando mapeo..."
-        # progress_ring.visible = True
-        # page.update() # Avoid redundant update
+        # Prepare sets for efficient lookup, case-insensitive
+        include_extensions_set = set(ext.lower() for ext in extensions_to_include if ext.startswith('.'))
+        # Exclusions are treated as simple strings to match the end of the filename
+        exclude_patterns_set = set(excl.lower() for excl in extensions_to_exclude)
 
         if not project_path.is_dir():
             show_dialog(page, "Error", "La ruta del proyecto seleccionada no es un directorio válido.")
             status_text.value = "Error: Ruta de proyecto inválida."
-            # progress_ring.visible = False # Handled in finally
-            # page.update() # Handled in finally
-            return # Exit thread
+            return
 
-        if not extensions_set:
-            # No need for a dialog here, just write the header
-             status_text.value = "Advertencia: No hay extensiones. Generando archivo vacío."
+        if not include_extensions_set and not extensions_to_exclude:
+             status_text.value = "Advertencia: No hay inclusiones ni exclusiones. Mapeando todos los archivos."
              page.update()
-            # Allow continuing, might be intentional
+        elif not include_extensions_set:
+             status_text.value = "Advertencia: No hay extensiones de inclusión. Mapeando archivos excepto los excluidos."
+             page.update()
+
 
         found_files = 0
         try:
             with open(output_path, "w", encoding="utf-8") as out_f:
                 out_f.write(f"# Mapeo del Proyecto: {project_path.name}\n\n")
                 out_f.write(f"Directorio base: `{project_dir}`\n")
-                out_f.write(f"Extensiones incluidas: `{', '.join(extensions) if extensions else 'Ninguna'}`\n\n")
+                out_f.write(f"Extensiones incluidas: `{', '.join(extensions_to_include) if extensions_to_include else 'Todas (excepto excluidas)'}`\n")
+                out_f.write(f"Extensiones/Patrones excluidos: `{', '.join(extensions_to_exclude) if extensions_to_exclude else 'Ninguno'}`\n\n")
                 out_f.write("---\n\n")
 
                 status_text.value = "Recorriendo directorios..."
                 page.update()
 
-                # Using pathlib's rglob for potentially cleaner iteration
-                all_files_gen = project_path.rglob("*") # Use generator for potentially large dirs
+                for root, _, files in os.walk(project_dir):
+                    current_dir_path = Path(root)
+                    for filename in files:
+                        # Check frequently if we should stop (Flet might handle page close)
+                        # if not page.running: return
 
-                for item_path in all_files_gen:
-                    # Check frequently if we should stop
-                    # if not page.running: return
+                        item_path = current_dir_path / filename
+                        file_ext_lower = item_path.suffix.lower()
+                        file_name_lower = item_path.name.lower()
 
-                    if item_path.is_file():
-                        file_ext = item_path.suffix.lower()
-                        if file_ext in extensions_set:
+                        # 1. Check inclusion criteria
+                        # If include_extensions_set is empty, we potentially include everything.
+                        # If it's not empty, the file extension MUST be in the set.
+                        included_by_extension = not include_extensions_set or file_ext_lower in include_extensions_set
+
+                        # 2. Check exclusion criteria
+                        # If the file is potentially included, check if it matches any exclusion pattern.
+                        is_excluded = False
+                        if included_by_extension and exclude_patterns_set:
+                            for excluded_pattern in exclude_patterns_set:
+                                if file_name_lower.endswith(excluded_pattern):
+                                    is_excluded = True
+                                    break # Found an exclusion match
+
+                        # 3. Final decision: Include if it met inclusion rules AND was NOT excluded
+                        if included_by_extension and not is_excluded:
                             found_files += 1
                             relative_path = item_path.relative_to(project_path)
                             status_text.value = f"Mapeando ({found_files}): {relative_path}"
                             page.update()
 
                             out_f.write(f"## `{relative_path}`\n\n")
-                            # Determine language hint for markdown code block
-                            lang_hint = file_ext.lstrip('.')
+                            lang_hint = file_ext_lower.lstrip('.')
                             out_f.write(f"```{lang_hint}\n")
                             try:
-                                # Add better error handling for file reading (e.g., binary files)
                                 with open(item_path, "r", encoding="utf-8", errors='ignore') as in_f:
                                     content = in_f.read()
                             except Exception as e:
@@ -239,74 +234,65 @@ def _map_project_thread(project_dir, extensions, output_file, page: ft.Page, pro
                             out_f.write(content)
                             out_f.write("\n```\n\n")
 
-            # Final status update after loop finishes
+
             status_text.value = f"¡Éxito! Mapeo completado. {found_files} archivos incluidos en '{output_file}'."
-            show_snackbar(page, f"Archivo Markdown generado: {output_file}") # Corrected call below
+            show_snackbar(page, f"Archivo Markdown generado: {output_file}")
 
         except Exception as e:
-            # Error during file writing or iteration
             status_text.value = f"Error durante el mapeo: {e}"
             show_dialog(page, "Error de Mapeo", f"Ocurrió un error al generar el archivo Markdown: {e}")
 
     except Exception as e:
-        # Catch any unexpected error within the thread itself
         try:
             status_text.value = f"Error inesperado en el hilo: {e}"
             show_dialog(page, "Error Interno", f"Ocurrió un error inesperado en el proceso: {e}")
         except:
-             print(f"Error grave en el hilo de mapeo, no se pudo actualizar UI: {e}") # Fallback print
+             print(f"Error grave en el hilo de mapeo, no se pudo actualizar UI: {e}")
 
     finally:
-        # Ensure UI elements are reset correctly, regardless of errors
         progress_ring.visible = False
         map_button.disabled = False
         page.update()
+
 
 # --- UI Helper Functions ---
 
 def show_dialog(page: ft.Page, title: str, message: str):
     """Displays a modal dialog."""
-    # CORRECTED: Directly assign the new dialog. Flet handles replacement.
-    # The 'page' object passed here *should* be the main page object.
     try:
         dlg = ft.AlertDialog(
             modal=True,
             title=ft.Text(title),
-            content=ft.Text(message, selectable=True), # Make content selectable
-            actions=[ft.TextButton("OK", on_click=lambda e: close_dialog(page, e.control.data))], # Pass dialog instance for closing
+            content=ft.Text(message, selectable=True),
+            actions=[ft.TextButton("OK", on_click=lambda e: close_dialog(page, e.control.data))],
             actions_alignment=ft.MainAxisAlignment.END,
         )
-        # Pass the dialog instance itself to the close button's data
         dlg.actions[0].data = dlg
-        page.dialog = dlg # Assign to page attribute
+        page.dialog = dlg
         dlg.open = True
         page.update()
     except Exception as e:
-        print(f"Error showing dialog: {e}") # Fallback for critical errors
+        print(f"Error showing dialog: {e}")
 
 def close_dialog(page: ft.Page, dlg: ft.AlertDialog):
     """Closes the specified dialog."""
-    # Check if the dialog we want to close is the currently assigned one
     try:
         if page.dialog == dlg:
             page.dialog.open = False
-            page.update() # Update needed to reflect closure
-            # It's generally safer NOT to set page.dialog = None here,
-            # let Flet manage the attribute lifecycle.
+            page.update()
     except Exception as e:
         print(f"Error closing dialog: {e}")
 
 def show_snackbar(page: ft.Page, message: str, error=False):
     """Displays a temporary SnackBar message."""
-    # CORRECTED: Assign to page.snack_bar and open it
     try:
         sb = ft.SnackBar(
                 ft.Text(message),
                 open=True,
                 bgcolor=ft.Colors.ERROR if error else ft.Colors.GREEN_700,
             )
-        page.snack_bar = sb # Assign the instance
-        page.update() # Update the page to show the snackbar
+        page.snack_bar = sb
+        page.update()
     except Exception as e:
         print(f"Error showing snackbar: {e}")
 
@@ -317,15 +303,19 @@ def main(page: ft.Page):
     page.title = "Utilidad de Archivos"
     page.vertical_alignment = ft.MainAxisAlignment.START
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    page.window_width = 700
-    page.window_height = 650
+    page.window_width = 850 # Increased width to accommodate side-by-side lists
+    page.window_height = 700 # Increased height slightly
 
     # --- State Variables ---
     base_dir_path = ft.Ref[ft.Text]()
     json_file_path = ft.Ref[ft.Text]()
     project_dir_path = ft.Ref[ft.Text]()
+    # Included extensions
     extensions_list = ft.Ref[ft.ListView]()
     new_extension_input = ft.Ref[ft.TextField]()
+    # Excluded extensions
+    excluded_extensions_list = ft.Ref[ft.ListView]()
+    new_excluded_extension_input = ft.Ref[ft.TextField]()
     # Status indicators
     creator_status_text = ft.Ref[ft.Text]()
     creator_progress = ft.Ref[ft.ProgressRing]()
@@ -335,11 +325,11 @@ def main(page: ft.Page):
     create_button = ft.Ref[ft.ElevatedButton]()
     map_button = ft.Ref[ft.ElevatedButton]()
 
-
-    current_extensions = [] # Python list to hold extension strings
+    # Python lists to hold extension strings
+    current_extensions = []
+    current_excluded_extensions = []
 
     # --- File Pickers ---
-    # Keep the FilePicker setup as it was in the previous corrected version
     def on_dialog_result(e: ft.FilePickerResultEvent):
         target_ref = e.page.overlay[e.page.overlay.index(e.control)].data
         target_text = target_ref.current
@@ -350,6 +340,10 @@ def main(page: ft.Page):
         elif e.path:
             target_text.value = e.path
             target_text.tooltip = e.path
+        else: # Handle cancellation
+            if not target_text.value: # Only reset if nothing was selected before
+                 target_text.value = target_text.data # Reset to initial text
+                 target_text.tooltip = ""
         page.update()
 
     base_dir_picker = ft.FilePicker(on_result=on_dialog_result)
@@ -365,9 +359,15 @@ def main(page: ft.Page):
     # == Creator Tab Handlers ==
     def pick_base_dir(e):
         base_dir_picker.get_directory_path(dialog_title="Seleccionar directorio base")
+        # Store initial text in control's data attribute for reset on cancel
+        if base_dir_path.current: base_dir_path.current.data = base_dir_path.current.value
+
 
     def pick_json_file(e):
+        # Store initial text in control's data attribute for reset on cancel
+        if json_file_path.current: json_file_path.current.data = json_file_path.current.value
         json_file_picker.pick_files(dialog_title="Seleccionar archivo JSON", allow_multiple=False, allowed_extensions=["json"])
+
 
     def start_creation_process(e):
         base_dir = base_dir_path.current.value
@@ -380,24 +380,26 @@ def main(page: ft.Page):
             show_dialog(page, "Error", "Debe seleccionar un archivo JSON.")
             return
 
-        # Logic now handles button disabling/enabling and status updates
         create_files_from_json_logic(
             base_dir,
             json_file,
             page,
             creator_progress.current,
             creator_status_text.current,
-            create_button.current # Pass the button control
+            create_button.current
         )
 
     # == Mapper Tab Handlers ==
     def pick_project_dir(e):
+         # Store initial text in control's data attribute for reset on cancel
+        if project_dir_path.current: project_dir_path.current.data = project_dir_path.current.value
         project_dir_picker.get_directory_path(dialog_title="Seleccionar carpeta del proyecto")
 
+    # --- Included Extensions ---
     def add_extension(e):
         ext = new_extension_input.current.value.strip().lower()
         if not ext: return
-        if not ext.startswith("."): ext = "." + ext
+        if not ext.startswith("."): ext = "." + ext # Force leading dot for inclusions
         if ext not in current_extensions:
             current_extensions.append(ext)
             update_extensions_view()
@@ -405,7 +407,7 @@ def main(page: ft.Page):
             new_extension_input.current.focus()
             page.update()
         else:
-            show_snackbar(page, f"La extensión '{ext}' ya existe.", error=True)
+            show_snackbar(page, f"La extensión de inclusión '{ext}' ya existe.", error=True)
 
     def delete_extension(e):
         ext_to_delete = e.control.data
@@ -423,17 +425,63 @@ def main(page: ft.Page):
                         ft.Text(ext, expand=True),
                         ft.IconButton(
                             ft.Icons.DELETE_OUTLINE,
-                            tooltip=f"Eliminar {ext}",
+                            tooltip=f"Eliminar inclusión {ext}",
                             on_click=delete_extension,
                             data=ext,
                             icon_color=ft.Colors.RED_400,
+                            icon_size=18, # Slightly smaller icon
+                            padding=ft.padding.only(left=0) # Reduce padding
                         )
-                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER
                 )
             )
         if extensions_list.current:
             extensions_list.current.controls = controls
 
+    # --- Excluded Extensions ---
+    def add_excluded_extension(e):
+        ext_excl = new_excluded_extension_input.current.value.strip().lower()
+        if not ext_excl: return
+        # No automatic dot prepending for exclusions
+        if ext_excl not in current_excluded_extensions:
+            current_excluded_extensions.append(ext_excl)
+            update_excluded_extensions_view()
+            new_excluded_extension_input.current.value = ""
+            new_excluded_extension_input.current.focus()
+            page.update()
+        else:
+            show_snackbar(page, f"La exclusión '{ext_excl}' ya existe.", error=True)
+
+    def delete_excluded_extension(e):
+        ext_to_delete = e.control.data
+        if ext_to_delete in current_excluded_extensions:
+            current_excluded_extensions.remove(ext_to_delete)
+            update_excluded_extensions_view()
+            page.update()
+
+    def update_excluded_extensions_view():
+        controls = []
+        for ext in sorted(current_excluded_extensions):
+            controls.append(
+                ft.Row(
+                    [
+                        ft.Text(ext, expand=True),
+                        ft.IconButton(
+                            ft.Icons.DELETE_OUTLINE,
+                            tooltip=f"Eliminar exclusión {ext}",
+                            on_click=delete_excluded_extension,
+                            data=ext,
+                            icon_color=ft.Colors.RED_400,
+                            icon_size=18, # Slightly smaller icon
+                            padding=ft.padding.only(left=0) # Reduce padding
+                        )
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER
+                )
+            )
+        if excluded_extensions_list.current:
+            excluded_extensions_list.current.controls = controls
+
+    # --- Mapping Process Start ---
     def start_mapping_process(e):
         project_dir = project_dir_path.current.value
         output_dir = Path.cwd()
@@ -443,44 +491,24 @@ def main(page: ft.Page):
             show_dialog(page, "Error", "Debe seleccionar una carpeta de proyecto.")
             return
 
-        def on_confirm_no_ext(evt):
-            local_page = evt.page
-            dlg_to_close = local_page.dialog
-            if dlg_to_close:
-                close_dialog(local_page, dlg_to_close)
-            if evt.control.data == "yes":
-                _proceed_with_mapping(project_dir, str(output_file))
-
-        if not current_extensions:
-            dlg_confirm = ft.AlertDialog(
-                modal=True,
-                title=ft.Text("Confirmar Mapeo"),
-                content=ft.Text("No se ha agregado ninguna extensión. ¿Continuar y generar un archivo vacío?"),
-                actions=[
-                    ft.TextButton("Sí", on_click=on_confirm_no_ext, data="yes"),
-                    ft.TextButton("No", on_click=lambda evt: close_dialog(evt.page, evt.page.dialog) , data="no"),
-                ], actions_alignment=ft.MainAxisAlignment.END
-            )
-            # Pass the dialog instance to the 'No' button's close action
-            dlg_confirm.actions[1].on_click = lambda evt: close_dialog(evt.page, dlg_confirm)
-
-            page.dialog = dlg_confirm
-            dlg_confirm.open = True
-            page.update()
-            return
+        # Confirmation for no included extensions is less critical now,
+        # as it might be intended if exclusions are used.
+        # We can remove the confirmation dialog or adjust its message.
+        # Let's proceed without confirmation for now.
 
         _proceed_with_mapping(project_dir, str(output_file))
 
+
     def _proceed_with_mapping(project_dir, output_file):
-        # Logic now handles button disabling/enabling and status updates
         map_project_logic(
             project_dir,
             list(current_extensions),
+            list(current_excluded_extensions), # Pass excluded list
             output_file,
             page,
             mapper_progress.current,
             mapper_status_text.current,
-            map_button.current # Pass the button control
+            map_button.current
         )
 
 
@@ -503,7 +531,7 @@ def main(page: ft.Page):
                 ft.Divider(height=20),
                 ft.ElevatedButton(
                     "Crear Archivos",
-                    ref=create_button, # Ref for the button itself
+                    ref=create_button,
                     icon=ft.Icons.CREATE_NEW_FOLDER,
                     on_click=start_creation_process,
                     bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE
@@ -527,24 +555,68 @@ def main(page: ft.Page):
                     ft.Text("Ruta no seleccionada", ref=project_dir_path, expand=True, no_wrap=True),
                 ], alignment=ft.MainAxisAlignment.START),
                 ft.Divider(height=10),
-                ft.Text("Extensiones a incluir (ej: .py, .js, .css):"),
-                ft.Row([
-                    ft.TextField(ref=new_extension_input, label="Nueva extensión", hint_text=".ts", expand=True, dense=True, on_submit=add_extension),
-                    ft.ElevatedButton("Agregar", icon=ft.Icons.ADD, on_click=add_extension),
-                ]),
-                ft.Text("Extensiones agregadas:"),
-                ft.Container(
-                    content=ft.ListView(ref=extensions_list, spacing=5, auto_scroll=True),
-                    height=150,
-                    # CORRECTED: Use ft.Colors.OUTLINE
-                    border=ft.border.all(1, ft.Colors.OUTLINE), # Use theme color
-                    border_radius=ft.border_radius.all(4),
-                    padding=ft.padding.all(5),
+
+                # --- Row for Included and Excluded side-by-side ---
+                ft.Row(
+                    [
+                        # --- Column for Included Extensions ---
+                        ft.Column(
+                            [
+                                ft.Text("Extensiones a incluir (ej: .py, .dart):"),
+                                ft.Row([
+                                    ft.TextField(ref=new_extension_input, label="Incluir", hint_text=".ts", expand=True, dense=True, on_submit=add_extension),
+                                    ft.ElevatedButton("Agregar", icon=ft.Icons.ADD, on_click=add_extension, tooltip="Añadir extensión a incluir"),
+                                ], alignment=ft.MainAxisAlignment.START),
+                                ft.Text("Incluidas:"),
+                                ft.Container(
+                                    content=ft.ListView(ref=extensions_list, spacing=2, auto_scroll=True),
+                                    # height=180, # Adjust height as needed
+                                    expand=True, # Take available vertical space
+                                    border=ft.border.all(1, ft.colors.with_opacity(0.5, ft.Colors.OUTLINE)),
+                                    border_radius=ft.border_radius.all(4),
+                                    padding=ft.padding.all(5),
+                                ),
+                            ],
+                            expand=True, # Make this column take half the space
+                            spacing=8,
+                         ),
+
+                        # --- Vertical Divider (Optional) ---
+                        # ft.VerticalDivider(width=20),
+
+                        # --- Column for Excluded Extensions ---
+                        ft.Column(
+                            [
+                                ft.Text("Patrones a excluir (ej: .g.dart, _test.py):"),
+                                ft.Row([
+                                    ft.TextField(ref=new_excluded_extension_input, label="Excluir", hint_text=".g.dart", expand=True, dense=True, on_submit=add_excluded_extension),
+                                    ft.ElevatedButton("Agregar", icon=ft.Icons.ADD, on_click=add_excluded_extension, tooltip="Añadir patrón a excluir"),
+                                ], alignment=ft.MainAxisAlignment.START),
+                                ft.Text("Excluidas:"),
+                                ft.Container(
+                                    content=ft.ListView(ref=excluded_extensions_list, spacing=2, auto_scroll=True),
+                                    # height=180, # Adjust height as needed
+                                    expand=True, # Take available vertical space
+                                    border=ft.border.all(1, ft.colors.with_opacity(0.5, ft.Colors.OUTLINE)),
+                                    border_radius=ft.border_radius.all(4),
+                                    padding=ft.padding.all(5),
+                                ),
+                            ],
+                            expand=True, # Make this column take half the space
+                            spacing=8,
+                         ),
+                    ],
+                    spacing=15, # Space between the two columns
+                    vertical_alignment=ft.CrossAxisAlignment.START,
+                    # Give the row a fixed height or let it expand based on content + expanded containers
+                    height=280 # Adjust overall height for the extension area
                 ),
+                # --- End of Row for Extensions ---
+
                 ft.Divider(height=20),
                  ft.ElevatedButton(
                     "Iniciar Mapeo",
-                    ref=map_button, # Ref for the button itself
+                    ref=map_button,
                     icon=ft.Icons.DOCUMENT_SCANNER,
                     on_click=start_mapping_process,
                     bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE
@@ -555,7 +627,8 @@ def main(page: ft.Page):
                  ], visible=True),
                  ft.Text("Salida: 'salida_mapeo.md' en el directorio actual.", italic=True, size=11, selectable=True)
 
-            ], spacing=15, scroll=ft.ScrollMode.ADAPTIVE,
+            ], spacing=10, # Adjusted spacing for tighter layout
+               scroll=ft.ScrollMode.ADAPTIVE,
         )
     )
 
@@ -569,7 +642,12 @@ def main(page: ft.Page):
     )
 
     page.add(tabs)
+    # Initial setup for both lists
+    if base_dir_path.current: base_dir_path.current.data = base_dir_path.current.value
+    if json_file_path.current: json_file_path.current.data = json_file_path.current.value
+    if project_dir_path.current: project_dir_path.current.data = project_dir_path.current.value
     update_extensions_view()
+    update_excluded_extensions_view() # Initialize excluded list view
     page.update()
 
 # --- Run the App ---
