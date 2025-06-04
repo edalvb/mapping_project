@@ -1,2 +1,3 @@
 # Estas librerías son necesarias para generar el ejecutable con PyInstaller.
 pyinstaller>=5.10.1
+flet>=0.28.3

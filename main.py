@@ -572,7 +572,7 @@ def main(page: ft.Page):
                                     content=ft.ListView(ref=extensions_list, spacing=2, auto_scroll=True),
                                     # height=180, # Adjust height as needed
                                     expand=True, # Take available vertical space
-                                    border=ft.border.all(1, ft.colors.with_opacity(0.5, ft.Colors.OUTLINE)),
+                                    border=ft.border.all(1, ft.Colors.with_opacity(0.5, ft.Colors.OUTLINE)),
                                     border_radius=ft.border_radius.all(4),
                                     padding=ft.padding.all(5),
                                 ),
@@ -597,7 +597,7 @@ def main(page: ft.Page):
                                     content=ft.ListView(ref=excluded_extensions_list, spacing=2, auto_scroll=True),
                                     # height=180, # Adjust height as needed
                                     expand=True, # Take available vertical space
-                                    border=ft.border.all(1, ft.colors.with_opacity(0.5, ft.Colors.OUTLINE)),
+                                    border=ft.border.all(1, ft.Colors.with_opacity(0.5, ft.Colors.OUTLINE)),
                                     border_radius=ft.border_radius.all(4),
                                     padding=ft.padding.all(5),
                                 ),
