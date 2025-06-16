@@ -14,7 +14,7 @@ class GeminiRepository(ILLMRepository):
             raise ValueError("Google API key is not set.")
 
         self._model = ChatGoogleGenerativeAI(
-            model="gemini-2.5-pro-preview-06-05",
+            model="gemini-2.5-flash-preview-05-20",
             temperature=0.0,
             max_retries=max_retries,
             google_api_key=settings.GOOGLE_API_KEY

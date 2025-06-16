@@ -1,8 +1,9 @@
 import json
+import re
 from typing import Callable, Dict, List
 
 from ...data.dto.code_generation_dto import FileContentList
-from ..models.agent_models import AgentTask, ExecutionProgress, ModelProvider
+from ..models.agent_models import AgentTask, Author, ChatMessage, ExecutionProgress, ModelProvider
 from ..repositories.i_file_system_repository import IFileSystemRepository
 from ..repositories.i_llm_repository import ILLMRepository
 from ..repositories.i_project_mapper_repository import IProjectMapperRepository
@@ -18,6 +19,21 @@ class AgentService:
         self._llm_repos = llm_repositories
         self._fs_repo = file_system_repository
         self._mapper_repo = project_mapper_repository
+
+    def generate_interim_response(
+        self, 
+        conversation: List[ChatMessage], 
+        model_provider: ModelProvider
+    ) -> str:
+        llm_repo = self._get_llm_repository(model_provider)
+        
+        prompt_template = """Eres Cortex, un asistente de desarrollo de IA de élite. La siguiente es una conversación con un usuario. Tu tarea es proporcionar una respuesta breve, útil y contextual. Confirma que entiendes la última solicitud del usuario y anímale a usar el botón 'Start Agent' para comenzar la ejecución de la tarea principal. No generes código. Sé conciso.\n\nCONVERSACIÓN:\n{conversation_history}"""
+
+        conversation_history = "\n".join([f"{msg.author.value}: {msg.content}" for msg in conversation])
+        context = {"conversation_history": conversation_history}
+
+        response = llm_repo.execute_prompt(prompt_template, context)
+        return response
 
     def execute_task(
         self,
@@ -56,38 +72,42 @@ class AgentService:
             progress.message = "No active steps to execute."
             return
 
-        list_files_step = next((s for s in active_steps if "lista" in s.name.lower()), None)
-        code_gen_step = next((s for s in active_steps if "codifica" in s.name.lower()), None)
-        commit_step = next((s for s in active_steps if "commit" in s.name.lower()), None)
+        total_steps = len(active_steps)
+        progress.total_steps = total_steps
 
-        file_list_json_str = ""
-        for step in [s for s in active_steps if s not in [code_gen_step, commit_step]]:
-            progress.message = f"Executing: {step.name}"
+        step_results = {}
+
+        for i, step in enumerate(active_steps):
+            progress.current_step = i + 1
+            progress.message = f"Executing step {i+1}/{total_steps}: {step.name}"
             progress_callback(progress)
-            result = llm_repo.execute_prompt(step.prompt_template, context)
-            context[f"{step.name.lower().replace(' ', '_')}_result"] = result
-            if step == list_files_step:
-                file_list_json_str = result
 
-        if code_gen_step and file_list_json_str:
-            self._process_code_generation(
-                code_gen_step.prompt_template, context, file_list_json_str,
-                progress, progress_callback, project_dir, llm_repo
-            )
+            step_context = context.copy()
+            step_context.update(step_results)
 
-        if commit_step:
-            progress.message = f"Executing: {commit_step.name}"
-            progress_callback(progress)
-            llm_repo.execute_prompt(commit_step.prompt_template, context)
-
+            if "Generar Código por Lote" in step.name:
+                self._process_code_generation(
+                    step.prompt_template, step_context, progress, progress_callback, project_dir, llm_repo
+                )
+            else:
+                result = llm_repo.execute_prompt(step.prompt_template, step_context)
+                result_key = f"{step.name.lower().replace(' ', '_').replace('.', '').replace('(', '').replace(')', '')}_result"
+                step_results[result_key] = result
+                context[result_key] = result
+        
         progress.message = "Task completed successfully."
+        progress.current_step = total_steps
 
     def _process_code_generation(
-        self, template: str, context: Dict[str, str], file_list_json: str,
+        self, template: str, context: Dict[str, str],
         progress: ExecutionProgress, progress_callback: Callable[[ExecutionProgress], None],
         project_dir: str, llm_repo: ILLMRepository
     ):
-        work_queue = self._parse_file_list(file_list_json)
+        file_list_json_str = context.get("2_listar_archivos_accionables_json_result", "[]")
+        work_queue = self._parse_file_list(file_list_json_str)
+        if not work_queue:
+            return
+            
         batches = [work_queue[i:i + 2] for i in range(0, len(work_queue), 2)]
 
         for i, batch in enumerate(batches):
@@ -98,20 +118,22 @@ class AgentService:
             batch_context["file_list"] = "\n".join([f"- {item['path']}" for item in batch])
 
             code_json_str = llm_repo.execute_prompt(template, batch_context)
-            file_contents = FileContentList.model_validate_json(code_json_str)
+            
+            cleaned_json_str = self._clean_json_string(code_json_str)
+            file_contents = FileContentList.model_validate_json(cleaned_json_str)
             
             for file_content in file_contents.root:
-                full_path = f"{project_dir}/{file_content.path}"
-                self._fs_repo.write_file(full_path, file_content.content)
+                self._fs_repo.write_file(file_content.path, file_content.content)
 
             context["project_map"] = self._mapper_repo.map_project_to_string(project_dir, [], [])
             progress_callback(progress)
 
     def _initialize_context(self, task: AgentTask, project_dir: str) -> Dict[str, str]:
         if not self._fs_repo.is_directory(project_dir):
-            raise ValueError(f"Project directory not found: {project_dir}")
+            project_map = "Project directory not selected or does not exist."
+        else:
+            project_map = self._mapper_repo.map_project_to_string(project_dir, [], [])
 
-        project_map = self._mapper_repo.map_project_to_string(project_dir, [], [])
         conversation_history = "\n".join([f"{msg.author.value}: {msg.content}" for msg in task.conversation])
         
         return {
@@ -122,7 +144,14 @@ class AgentService:
 
     def _parse_file_list(self, json_str: str) -> List[Dict[str, str]]:
         try:
-            data = json.loads(json_str)
+            cleaned_json = self._clean_json_string(json_str)
+            data = json.loads(cleaned_json)
             return data if isinstance(data, list) else []
         except json.JSONDecodeError:
             return []
+            
+    def _clean_json_string(self, json_str: str) -> str:
+        match = re.search(r'```json\n(.*?)\n```', json_str, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        return json_str.strip()

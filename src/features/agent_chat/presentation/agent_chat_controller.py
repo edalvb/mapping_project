@@ -32,9 +32,33 @@ class AgentChatController:
             self.update_view()
 
     def handle_user_message(self, text: str):
+        if not text.strip():
+            return
+
         user_message = ChatMessage(author=Author.USER, content=text)
         self.state.conversation.append(user_message)
+
+        thinking_message = ChatMessage(author=Author.AGENT, content="*Pensando...*")
+        self.state.conversation.append(thinking_message)
         self.update_view()
+
+        thread = threading.Thread(
+            target=self._execute_agent_response,
+            args=(thinking_message,)
+        )
+        thread.start()
+
+    def _execute_agent_response(self, placeholder_message: ChatMessage):
+        try:
+            response_text = self.agent_service.generate_interim_response(
+                conversation=self.state.conversation,
+                model_provider=self.state.model_provider
+            )
+            placeholder_message.content = response_text
+        except Exception as e:
+            placeholder_message.content = f"Error al procesar la respuesta: {str(e)}"
+        finally:
+            self.update_view()
 
     def update_commit_header(self, header: str):
         self.state.commit_header = header
@@ -52,7 +76,7 @@ class AgentChatController:
     def add_prompt_step(self):
         new_order = max([s.order for s in self.state.prompt_steps] + [0]) + 1
         new_step = PromptStep(
-            name="Nuevo Paso",
+            name=f"{new_order}. Nuevo Paso",
             prompt_template="Escribe aquí tu prompt...",
             is_active=True,
             order=new_order
@@ -65,7 +89,7 @@ class AgentChatController:
         self.update_view()
 
     def start_agent_task(self):
-        if not self.state.project_directory:
+        if self.state.progress.is_running or not self.state.project_directory:
             return
         
         task = AgentTask(
