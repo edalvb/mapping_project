@@ -1,6 +1,6 @@
 import json
 import re
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Optional
 
 from ...data.dto.code_generation_dto import FileContentList
 from ..models.agent_models import AgentTask, Author, ChatMessage, ExecutionProgress, ModelProvider
@@ -23,14 +23,29 @@ class AgentService:
     def generate_interim_response(
         self, 
         conversation: List[ChatMessage], 
-        model_provider: ModelProvider
+        model_provider: ModelProvider,
+        project_dir: Optional[str]
     ) -> str:
         llm_repo = self._get_llm_repository(model_provider)
         
-        prompt_template = """Eres Cortex, un asistente de desarrollo de IA de élite. La siguiente es una conversación con un usuario. Tu tarea es proporcionar una respuesta breve, útil y contextual. Confirma que entiendes la última solicitud del usuario y anímale a usar el botón 'Start Agent' para comenzar la ejecución de la tarea principal. No generes código. Sé conciso.\n\nCONVERSACIÓN:\n{conversation_history}"""
+        prompt_template = """Eres Cortex, un asistente de desarrollo de IA de élite. La siguiente es una conversación con un usuario y el mapa del proyecto actual. Tu tarea es proporcionar una respuesta breve, útil y contextual. Confirma que entiendes la última solicitud del usuario y anímale a usar el botón 'Start Agent' para comenzar la ejecución de la tarea principal. No generes código. Sé conciso.
+
+CONVERSACIÓN:
+{conversation_history}
+
+MAPA DEL PROYECTO:
+{project_map}"""
+
+        if project_dir and self._fs_repo.is_directory(project_dir):
+            project_map = self._mapper_repo.map_project_to_string(project_dir, [], [])
+        else:
+            project_map = "El directorio del proyecto aún no ha sido seleccionado."
 
         conversation_history = "\n".join([f"{msg.author.value}: {msg.content}" for msg in conversation])
-        context = {"conversation_history": conversation_history}
+        context = {
+            "conversation_history": conversation_history,
+            "project_map": project_map
+        }
 
         response = llm_repo.execute_prompt(prompt_template, context)
         return response

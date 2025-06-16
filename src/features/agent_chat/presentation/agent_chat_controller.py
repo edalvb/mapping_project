@@ -52,7 +52,8 @@ class AgentChatController:
         try:
             response_text = self.agent_service.generate_interim_response(
                 conversation=self.state.conversation,
-                model_provider=self.state.model_provider
+                model_provider=self.state.model_provider,
+                project_dir=self.state.project_directory
             )
             placeholder_message.content = response_text
         except Exception as e:
