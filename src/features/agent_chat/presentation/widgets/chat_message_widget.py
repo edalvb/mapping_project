@@ -32,14 +32,32 @@ class ChatMessageWidget(ft.Row):
             expand=True,
         )
 
+        copy_button = ft.IconButton(
+            icon=ft.Icons.COPY_ALL_OUTLINED,
+            icon_size=16,
+            tooltip="Copiar al portapapeles",
+            on_click=self._copy_to_clipboard
+        )
+
         if is_user:
             self.alignment = ft.MainAxisAlignment.END
             self.controls = [
                 ft.Column([message_container], expand=True, horizontal_alignment=ft.CrossAxisAlignment.END),
-                author_icon
+                ft.Column([author_icon, copy_button], spacing=5)
             ]
         else:
             self.controls = [
-                author_icon,
+                ft.Column([author_icon, copy_button], spacing=5),
                 ft.Column([message_container], expand=True)
             ]
+            
+    def _copy_to_clipboard(self, e):
+        if not self.page:
+            return
+        self.page.set_clipboard(self.message.content)
+        self.page.snack_bar = ft.SnackBar(
+            content=ft.Text("Mensaje copiado al portapapeles"),
+            duration=2000
+        )
+        self.page.snack_bar.open = True
+        self.page.update()

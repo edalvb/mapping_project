@@ -1,0 +1,2 @@
+class TaskInterruptedException(Exception):
+    pass

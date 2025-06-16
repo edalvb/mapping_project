@@ -1,7 +1,7 @@
 import flet as ft
 import threading
 import uuid
-from typing import Callable
+from typing import Callable, Optional
 
 from ..domain.models.agent_models import (
     AgentTask,
@@ -25,6 +25,7 @@ class AgentChatController:
         self.agent_service = agent_service
         self.state = state
         self.update_view = update_callback
+        self.current_stop_event: Optional[threading.Event] = None
 
     def select_project_directory(self, e: ft.FilePickerResultEvent):
         if e.path:
@@ -32,7 +33,7 @@ class AgentChatController:
             self.update_view()
 
     def handle_user_message(self, text: str):
-        if not text.strip():
+        if not text.strip() or self.state.progress.is_running:
             return
 
         user_message = ChatMessage(author=Author.USER, content=text)
@@ -40,11 +41,15 @@ class AgentChatController:
 
         thinking_message = ChatMessage(author=Author.AGENT, content="*Pensando...*")
         self.state.conversation.append(thinking_message)
+        
+        self.state.progress.is_running = True
+        self.state.progress.message = "Generando respuesta..."
         self.update_view()
-
+        
+        self.current_stop_event = threading.Event()
         thread = threading.Thread(
             target=self._execute_agent_response,
-            args=(thinking_message,)
+            args=(thinking_message, self.current_stop_event)
         )
         thread.start()
 
@@ -52,17 +57,24 @@ class AgentChatController:
         self.state.conversation.clear()
         self.update_view()
 
-    def _execute_agent_response(self, placeholder_message: ChatMessage):
+    def _execute_agent_response(self, placeholder_message: ChatMessage, stop_event: threading.Event):
         try:
             response_text = self.agent_service.generate_interim_response(
                 conversation=self.state.conversation,
                 model_provider=self.state.model_provider,
-                project_dir=self.state.project_directory
+                project_dir=self.state.project_directory,
+                stop_event=stop_event
             )
-            placeholder_message.content = response_text
+            if response_text is not None:
+                placeholder_message.content = response_text
+            else:
+                placeholder_message.content = "*Operación cancelada por el usuario.*"
         except Exception as e:
             placeholder_message.content = f"Error al procesar la respuesta: {str(e)}"
         finally:
+            self.state.progress.is_running = False
+            self.state.progress.message = "Idle"
+            self.current_stop_event = None
             self.update_view()
 
     def update_commit_header(self, header: str):
@@ -103,13 +115,20 @@ class AgentChatController:
             commit_header=self.state.commit_header,
             model_provider=self.state.model_provider
         )
-
+        
+        self.current_stop_event = threading.Event()
         thread = threading.Thread(
             target=self.agent_service.execute_task,
-            args=(task, self.state.project_directory, self._progress_callback)
+            args=(task, self.state.project_directory, self._progress_callback, self.current_stop_event)
         )
         thread.start()
 
+    def stop_current_task(self):
+        if self.current_stop_event:
+            self.current_stop_event.set()
+
     def _progress_callback(self, progress: ExecutionProgress):
         self.state.progress = progress
+        if not progress.is_running:
+            self.current_stop_event = None
         self.update_view()

@@ -16,16 +16,11 @@ class AgentChatPage(ft.Row):
         
         self.chat_history_view = ft.ListView(expand=True, auto_scroll=True, spacing=10)
         self.progress_bar = ft.ProgressBar(value=0, bar_height=5)
-        self.progress_text = ft.Text("Idle", size=12, expand=True)
-        self.copy_error_button = ft.IconButton(
-            icon=ft.Icons.COPY_ALL_ROUNDED,
-            tooltip="Copiar error",
-            on_click=self._copy_error_to_clipboard,
-            icon_size=16,
-            visible=False,
-            icon_color=theme.on_surface_variant
-        )
+        self.progress_text = ft.Text("Idle", size=12)
+        
         self.start_button = ft.FilledButton("Start Agent", icon=ft.Icons.PLAY_ARROW, on_click=lambda _: self.controller.start_agent_task())
+        self.stop_button = ft.OutlinedButton("Stop Agent", icon=ft.Icons.STOP_CIRCLE_OUTLINED, on_click=lambda _: self.controller.stop_current_task(), visible=False, icon_color=theme.error)
+        
         self.project_dir_text = ft.Text("No seleccionado", italic=True, size=12, expand=True)
 
         self.prompt_settings = AgentPromptSettingsWidget(
@@ -44,15 +39,6 @@ class AgentChatPage(ft.Row):
             on_change=lambda e: self.controller.update_model_provider(e.control.value)
         )
 
-        progress_status_row = ft.Row(
-            controls=[
-                self.progress_text,
-                self.copy_error_button,
-            ],
-            alignment=ft.MainAxisAlignment.START,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        )
-
         chat_panel = ft.Container(
             content=ft.Column(
                 [
@@ -69,7 +55,7 @@ class AgentChatPage(ft.Row):
                     ),
                     ft.Divider(),
                     self.chat_history_view,
-                    ft.Column([self.progress_bar, progress_status_row], spacing=5),
+                    ft.Column([self.progress_bar, self.progress_text], spacing=5),
                     ChatInputBarWidget(
                         on_submit=self.controller.handle_user_message, 
                         on_files_selected=lambda f: print("Files selected, logic to be implemented")
@@ -86,7 +72,8 @@ class AgentChatPage(ft.Row):
                 [
                     ft.Text("Configuración de Tarea", style=ft.TextThemeStyle.TITLE_LARGE),
                     ft.Divider(),
-                    ft.Row([                        ft.ElevatedButton(
+                    ft.Row([
+                        ft.ElevatedButton(
                             "Directorio del Proyecto", 
                             icon=ft.Icons.FOLDER_OPEN,
                             on_click=lambda _: self.file_picker.get_directory_path()
@@ -97,7 +84,7 @@ class AgentChatPage(ft.Row):
                     CommitHeaderWidget(on_change=self.controller.update_commit_header),
                     ft.Divider(height=20),
                     self.prompt_settings,
-                    self.start_button
+                    ft.Stack([self.start_button, self.stop_button])
                 ],
                 spacing=15,
                 horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
@@ -122,26 +109,21 @@ class AgentChatPage(ft.Row):
         self.chat_history_view.controls = [
             ChatMessageWidget(msg) for msg in self.state.conversation
         ]
+        
+        is_running = self.state.progress.is_running
         self.progress_bar.value = (
-            self.state.progress.current_step / self.state.progress.total_steps
+            (self.state.progress.current_step / self.state.progress.total_steps)
             if self.state.progress.total_steps > 0
-            else 0
+            else (1.0 if is_running else 0)
         )
+        self.progress_bar.color = theme.secondary if self.state.progress.total_steps > 0 else theme.tertiary
         self.progress_text.value = self.state.progress.message
-        self.start_button.disabled = self.state.progress.is_running or not self.state.project_directory
+        
+        self.start_button.visible = not is_running
+        self.stop_button.visible = is_running
+        self.start_button.disabled = not self.state.project_directory
+
         self.prompt_settings.update_steps(self.state.prompt_steps)
         self.project_dir_text.value = self.state.project_directory or "No seleccionado"
 
-        is_error_message = self.state.progress.message and "error" in self.state.progress.message.lower()
-        self.copy_error_button.visible = is_error_message
-
         self.update()
-
-    def _copy_error_to_clipboard(self, e):
-        if self.state.progress.message:
-            self.page.set_clipboard(self.state.progress.message)
-            self.page.snack_bar = ft.SnackBar(
-                content=ft.Text("Error copiado al portapapeles."),
-                open=True
-            )
-            self.page.update()
