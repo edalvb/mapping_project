@@ -26,7 +26,7 @@ class ChatMessageWidget(ft.Row):
             content=message_content,
             padding=ft.padding.all(12),
             border_radius=ft.border_radius.all(12),
-            bgcolor=theme.primary_container if is_user else theme.surface_variant,
+            bgcolor=theme.primary_container if is_user else theme.secondary_container,
             margin=ft.margin.only(top=5, bottom=5),
             alignment=ft.alignment.top_left,
             expand=True,

@@ -22,7 +22,7 @@ on_error_container = "#991B1B"
 
 surface = "#F8FAFC"
 on_surface = "#0F172A"
-surface_variant = "#E2E8F0"
+surface_variant = "#CBD5E1"
 on_surface_variant = "#475569"
 
 outline = "#94A3B8"
