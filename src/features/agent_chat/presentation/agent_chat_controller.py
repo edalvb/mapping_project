@@ -48,6 +48,10 @@ class AgentChatController:
         )
         thread.start()
 
+    def clear_chat_conversation(self):
+        self.state.conversation.clear()
+        self.update_view()
+
     def _execute_agent_response(self, placeholder_message: ChatMessage):
         try:
             response_text = self.agent_service.generate_interim_response(

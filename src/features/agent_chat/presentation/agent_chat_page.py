@@ -16,7 +16,15 @@ class AgentChatPage(ft.Row):
         
         self.chat_history_view = ft.ListView(expand=True, auto_scroll=True, spacing=10)
         self.progress_bar = ft.ProgressBar(value=0, bar_height=5)
-        self.progress_text = ft.Text("Idle", size=12)
+        self.progress_text = ft.Text("Idle", size=12, expand=True)
+        self.copy_error_button = ft.IconButton(
+            icon=ft.Icons.COPY_ALL_ROUNDED,
+            tooltip="Copiar error",
+            on_click=self._copy_error_to_clipboard,
+            icon_size=16,
+            visible=False,
+            icon_color=theme.on_surface_variant
+        )
         self.start_button = ft.FilledButton("Start Agent", icon=ft.Icons.PLAY_ARROW, on_click=lambda _: self.controller.start_agent_task())
         self.project_dir_text = ft.Text("No seleccionado", italic=True, size=12, expand=True)
 
@@ -36,11 +44,32 @@ class AgentChatPage(ft.Row):
             on_change=lambda e: self.controller.update_model_provider(e.control.value)
         )
 
+        progress_status_row = ft.Row(
+            controls=[
+                self.progress_text,
+                self.copy_error_button,
+            ],
+            alignment=ft.MainAxisAlignment.START,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+
         chat_panel = ft.Container(
             content=ft.Column(
                 [
+                    ft.Row(
+                        controls=[
+                            ft.Text("Conversación", style=ft.TextThemeStyle.TITLE_LARGE, expand=True),
+                            ft.IconButton(
+                                icon=ft.Icons.DELETE_SWEEP_OUTLINED,
+                                tooltip="Limpiar chat",
+                                on_click=lambda _: self.controller.clear_chat_conversation()
+                            )
+                        ],
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                    ),
+                    ft.Divider(),
                     self.chat_history_view,
-                    ft.Column([self.progress_bar, self.progress_text], spacing=5),
+                    ft.Column([self.progress_bar, progress_status_row], spacing=5),
                     ChatInputBarWidget(
                         on_submit=self.controller.handle_user_message, 
                         on_files_selected=lambda f: print("Files selected, logic to be implemented")
@@ -57,8 +86,7 @@ class AgentChatPage(ft.Row):
                 [
                     ft.Text("Configuración de Tarea", style=ft.TextThemeStyle.TITLE_LARGE),
                     ft.Divider(),
-                    ft.Row([
-                        ft.ElevatedButton(
+                    ft.Row([                        ft.ElevatedButton(
                             "Directorio del Proyecto", 
                             icon=ft.Icons.FOLDER_OPEN,
                             on_click=lambda _: self.file_picker.get_directory_path()
@@ -104,4 +132,16 @@ class AgentChatPage(ft.Row):
         self.prompt_settings.update_steps(self.state.prompt_steps)
         self.project_dir_text.value = self.state.project_directory or "No seleccionado"
 
+        is_error_message = self.state.progress.message and "error" in self.state.progress.message.lower()
+        self.copy_error_button.visible = is_error_message
+
         self.update()
+
+    def _copy_error_to_clipboard(self, e):
+        if self.state.progress.message:
+            self.page.set_clipboard(self.state.progress.message)
+            self.page.snack_bar = ft.SnackBar(
+                content=ft.Text("Error copiado al portapapeles."),
+                open=True
+            )
+            self.page.update()
