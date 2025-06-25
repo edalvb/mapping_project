@@ -1,0 +1,101 @@
+import flet as ft
+import threading
+from pathlib import Path
+
+from src.features.project_mapper.domain.models.mapping_config_model import MappingConfig
+from src.features.project_mapper.domain.services.project_mapper_service import ProjectMapperService
+from src.features.project_mapper.presentation.project_mapper_state import ProjectMapperState
+from src.shared.presentation.dialogs import show_dialog, show_snackbar
+
+class ProjectMapperController:
+    def __init__(self, page: ft.Page, state: ProjectMapperState, service: ProjectMapperService):
+        self.page = page
+        self.state = state
+        self.service = service
+
+        self._project_dir_picker = ft.FilePicker(on_result=self._on_project_dir_result)
+        self.page.overlay.append(self._project_dir_picker)
+
+    def _on_project_dir_result(self, e: ft.FilePickerResultEvent):
+        if e.path:
+            self.state.project_dir_path = e.path
+        self.page.update()
+
+    def pick_project_dir(self, e):
+        self._project_dir_picker.get_directory_path(dialog_title="Seleccionar carpeta del proyecto")
+
+    def on_change_include_text(self, e):
+        self.state.new_include_extension = e.control.value
+        self.page.update()
+
+    def on_change_exclude_text(self, e):
+        self.state.new_exclude_pattern = e.control.value
+        self.page.update()
+
+    def add_include_extension(self, e):
+        ext = self.state.new_include_extension.strip().lower()
+        if not ext: return
+        if not ext.startswith("."): ext = "." + ext
+        if ext not in self.state.include_extensions:
+            self.state.include_extensions.add(ext)
+            self.state.new_include_extension = ""
+        else:
+            show_snackbar(self.page, f"La inclusión '{ext}' ya existe.", is_error=True)
+        self.page.update()
+
+    def delete_include_extension(self, e):
+        ext_to_delete = e.control.data
+        self.state.include_extensions.discard(ext_to_delete)
+        self.page.update()
+
+    def add_exclude_pattern(self, e):
+        pat = self.state.new_exclude_pattern.strip().lower()
+        if not pat: return
+        if pat not in self.state.exclude_patterns:
+            self.state.exclude_patterns.add(pat)
+            self.state.new_exclude_pattern = ""
+        else:
+            show_snackbar(self.page, f"La exclusión '{pat}' ya existe.", is_error=True)
+        self.page.update()
+
+    def delete_exclude_pattern(self, e):
+        pat_to_delete = e.control.data
+        self.state.exclude_patterns.discard(pat_to_delete)
+        self.page.update()
+
+    def start_mapping_process(self, e):
+        if not self.state.project_dir_path:
+            show_dialog(self.page, "Error", "Debe seleccionar una carpeta de proyecto.")
+            return
+        
+        thread = threading.Thread(target=self._mapping_thread_worker)
+        thread.start()
+
+    def _update_progress(self, message: str):
+        self.state.status_text = message
+        self.page.update()
+
+    def _mapping_thread_worker(self):
+        self.state.is_loading = True
+        self.state.status_text = "Iniciando mapeo..."
+        self.page.update()
+
+        output_file = Path.cwd() / "salida_mapeo.md"
+        config = MappingConfig(
+            project_dir=self.state.project_dir_path,
+            include_extensions=self.state.include_extensions,
+            exclude_patterns=self.state.exclude_patterns,
+            output_file=str(output_file)
+        )
+
+        try:
+            found_files = self.service.execute(config, self._update_progress)
+            final_message = f"¡Éxito! Mapeo completado. {found_files} archivos incluidos en '{output_file.name}'."
+            self.state.status_text = final_message
+            show_snackbar(self.page, f"Archivo Markdown generado: {output_file.name}")
+        except Exception as e:
+            self.state.status_text = f"Error durante el mapeo: {e}"
+            show_dialog(self.page, "Error de Mapeo", f"Ocurrió un error: {e}")
+        finally:
+            self.state.is_loading = False
+            self.page.update()
