@@ -30,12 +30,16 @@ def main(page: ft.Page):
     file_creator_service = FileCreatorService(file_creator_repository)
     file_creator_state = FileCreatorState()
     file_creator_controller = FileCreatorController(page, file_creator_state, file_creator_service)
+    file_creator_view = FileCreatorView(file_creator_controller, file_creator_state)
+    file_creator_controller.view = file_creator_view
 
     # Slice: Project Mapper
     project_mapper_repository = FilesystemProjectMapperRepository()
     project_mapper_service = ProjectMapperService(project_mapper_repository)
     project_mapper_state = ProjectMapperState()
     project_mapper_controller = ProjectMapperController(page, project_mapper_state, project_mapper_service)
+    project_mapper_view = ProjectMapperView(project_mapper_controller, project_mapper_state)
+    project_mapper_controller.view = project_mapper_view
 
     # Control principal de la UI
     tabs = ft.Tabs(
@@ -44,23 +48,20 @@ def main(page: ft.Page):
         tabs=[
             ft.Tab(
                 text="Crear desde JSON",
-                content=FileCreatorView(file_creator_controller, file_creator_state),
+                content=file_creator_view,
                 icon=ft.Icons.SOURCE
             ),
             ft.Tab(
                 text="Mapear Proyecto",
-                content=ProjectMapperView(project_mapper_controller, project_mapper_state),
+                content=project_mapper_view,
                 icon=ft.Icons.MAP
             ),
         ],
         expand=True,
     )
 
-    # Añadir el control principal a la página
     page.add(tabs)
     page.update()
 
 if __name__ == "__main__":
-    # Para asegurar que las importaciones funcionen, ejecuta desde la raíz del proyecto:
-    # python -m src.main
     ft.app(target=main)

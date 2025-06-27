@@ -54,5 +54,8 @@ CORTEX_AI_THEME = ft.Theme(
         on_surface=CORTEX_AI_PALETTE.on_surface,
         on_surface_variant=CORTEX_AI_PALETTE.on_surface_variant,
         outline=CORTEX_AI_PALETTE.outline,
+    ),
+    tabs_theme=ft.TabsTheme(
+        unselected_label_color=CORTEX_AI_PALETTE.on_surface_variant,
     )
 )

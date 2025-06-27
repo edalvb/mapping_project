@@ -29,7 +29,7 @@ class ExtensionsListWidget(ft.Column):
                     [
                         ft.Text(item, expand=True),
                         ft.IconButton(
-                            ft.icons.DELETE_OUTLINE,
+                            ft.Icons.DELETE_OUTLINE,
                             tooltip=f"Eliminar {item}",
                             on_click=self.on_delete,
                             data=item,
