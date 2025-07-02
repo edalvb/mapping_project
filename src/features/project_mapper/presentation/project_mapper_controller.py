@@ -19,16 +19,33 @@ class ProjectMapperController:
         self.view: 'ProjectMapperView' = None
 
         self._project_dir_picker = ft.FilePicker(on_result=self._on_project_dir_result)
-        self.page.overlay.append(self._project_dir_picker)
+        self._output_dir_picker = ft.FilePicker(on_result=self._on_output_dir_result)
+        self.page.overlay.extend([self._project_dir_picker, self._output_dir_picker])
 
     def _on_project_dir_result(self, e: ft.FilePickerResultEvent):
         if e.path:
             self.state.project_dir_path = e.path
+            project_folder_name = Path(e.path).name
+            self.state.output_filename = f"{project_folder_name}.md"
+            if not self.state.output_dir_path:
+                self.state.output_dir_path = str(Path.cwd())
+        if self.view:
+            self.view.update_view()
+
+    def _on_output_dir_result(self, e: ft.FilePickerResultEvent):
+        if e.path:
+            self.state.output_dir_path = e.path
         if self.view:
             self.view.update_view()
 
     def pick_project_dir(self, e):
         self._project_dir_picker.get_directory_path(dialog_title="Seleccionar carpeta del proyecto")
+
+    def pick_output_dir(self, e):
+        self._output_dir_picker.get_directory_path(dialog_title="Seleccionar carpeta de salida")
+
+    def on_change_output_filename(self, e):
+        self.state.output_filename = e.control.value
 
     def on_change_include_text(self, e):
         self.state.new_include_extension = e.control.value
@@ -71,6 +88,9 @@ class ProjectMapperController:
         if not self.state.project_dir_path:
             show_dialog(self.page, "Error", "Debe seleccionar una carpeta de proyecto.")
             return
+        if not self.state.output_dir_path or not self.state.output_filename:
+            show_dialog(self.page, "Error", "Debe especificar una carpeta y un nombre de archivo de salida.")
+            return
 
         thread = threading.Thread(target=self._mapping_thread_worker)
         thread.start()
@@ -84,19 +104,19 @@ class ProjectMapperController:
         self.state.status_text = "Iniciando mapeo..."
         if self.view: self.view.update_view()
 
-        output_file = Path.cwd() / "salida_mapeo.md"
+        output_path = Path(self.state.output_dir_path) / self.state.output_filename
         config = MappingConfig(
             project_dir=self.state.project_dir_path,
             include_extensions=self.state.include_extensions,
             exclude_patterns=self.state.exclude_patterns,
-            output_file=str(output_file)
+            output_file=str(output_path)
         )
 
         try:
             found_files = self.service.execute(config, self._update_progress)
-            final_message = f"¡Éxito! Mapeo completado. {found_files} archivos incluidos en '{output_file.name}'."
+            final_message = f"¡Éxito! Mapeo completado. {found_files} archivos incluidos en '{self.state.output_filename}'."
             self.state.status_text = final_message
-            show_snackbar(self.page, f"Archivo Markdown generado: {output_file.name}")
+            show_snackbar(self.page, f"Archivo Markdown generado: {self.state.output_filename}")
         except Exception as e:
             self.state.status_text = f"Error durante el mapeo: {e}"
             show_dialog(self.page, "Error de Mapeo", f"Ocurrió un error: {e}")

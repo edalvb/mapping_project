@@ -27,6 +27,18 @@ class ProjectMapperView(ft.Column):
                 ft.ElevatedButton("Seleccionar Carpeta Proyecto", icon=ft.Icons.FOLDER_OPEN, on_click=self.controller.pick_project_dir),
                 ft.Text(self.state.project_dir_path or "Ruta no seleccionada", expand=True, no_wrap=True),
             ], alignment=ft.MainAxisAlignment.START),
+            ft.Divider(height=1, color=ft.Colors.TRANSPARENT),
+            ft.Row([
+                    ft.ElevatedButton("Carpeta de Salida", icon=ft.Icons.SAVE_AS, on_click=self.controller.pick_output_dir),
+                    ft.Text(self.state.output_dir_path or "Carpeta de salida no seleccionada", expand=True, no_wrap=True),
+                ], alignment=ft.MainAxisAlignment.START
+            ),
+            ft.TextField(
+                label="Nombre del Archivo de Salida",
+                value=self.state.output_filename,
+                on_change=self.controller.on_change_output_filename,
+                hint_text="Ej: nombre_proyecto.md",
+            ),
             ft.Divider(height=10),
             ft.Row(
                 [
@@ -66,5 +78,5 @@ class ProjectMapperView(ft.Column):
                 ft.ProgressRing(width=16, height=16, stroke_width=2, visible=self.state.is_loading),
                 ft.Text(self.state.status_text, expand=True, selectable=True)
             ], visible=True),
-            ft.Text("Salida: 'salida_mapeo.md' en el directorio actual.", italic=True, size=11, selectable=True)
+            ft.Text("El archivo de salida se guardará en la ruta especificada.", italic=True, size=11, selectable=True)
         ]
