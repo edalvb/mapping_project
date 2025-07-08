@@ -13,6 +13,7 @@ class ProjectMapperView(ft.Row):
         self.state = state
         self.vertical_alignment = ft.CrossAxisAlignment.START
         self.spacing = 20
+        self.expand = True
 
     def did_mount(self):
         self.update_view()
@@ -68,7 +69,7 @@ class ProjectMapperView(ft.Row):
                         tabs=[
                             ft.Tab(
                                 text="Configuración",
-                                icon=ft.Icons.ADD_CIRCLE_OUTLINE,
+                                icon=ft.Icons.SETTINGS,
                                 content=config
                             ),
                             ft.Tab(
@@ -102,23 +103,19 @@ class ProjectMapperView(ft.Row):
                     )
 
         left_panel = ft.Container(
-            content=ft.Column(
-                [
-                    DirectorySelectionWidget(
-                        title="Carpetas a Mapear",
-                        directories=self.state.subdirectories,
-                        on_toggle=self.controller.on_toggle_directory,
-                    )
-                ],
-                spacing=10,
+            content=DirectorySelectionWidget(
+                title="Carpetas a Mapear",
+                tree_root=self.state.directory_tree,
+                selected_paths=self.state.selected_dirs,
+                on_node_toggle=self.controller.on_directory_toggle,
             ),
-            expand=5, # 50% width
+            expand=1, 
             padding=ft.padding.only(right=10)
         )
 
         right_panel = ft.Container(
             content=tabs,
-            expand=5, # 50% width
+            expand=1, 
             padding=ft.padding.only(left=10)
         )
 

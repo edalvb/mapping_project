@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Set, Dict
+from typing import Optional, Set
+from src.features.project_mapper.domain.models.directory_node_model import DirectoryNode
 
 class ProjectMapperState(BaseModel):
     project_dir_path: Optional[str] = None
@@ -11,4 +12,8 @@ class ProjectMapperState(BaseModel):
     new_exclude_pattern: str = ""
     is_loading: bool = False
     status_text: str = ""
-    subdirectories: Dict[str, bool] = Field(default_factory=dict)
+    directory_tree: Optional[DirectoryNode] = None
+    selected_dirs: Set[str] = Field(default_factory=set)
+
+    class Config:
+        arbitrary_types_allowed = True
