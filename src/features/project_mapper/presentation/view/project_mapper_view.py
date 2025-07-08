@@ -22,56 +22,8 @@ class ProjectMapperView(ft.Row):
         if self.page: self.page.update()
 
     def _build_content(self):
-        left_panel = ft.Container(
-            content=ft.Column(
-                [
-                    DirectorySelectionWidget(
-                        title="Carpetas a Mapear",
-                        directories=self.state.subdirectories,
-                        on_toggle=self.controller.on_toggle_directory,
-                    ),
-                    ft.Tabs(
-                        selected_index=0,
-                        animation_duration=300,
-                        tabs=[
-                            ft.Tab(
-                                text="Incluir",
-                                icon=ft.Icons.ADD_CIRCLE_OUTLINE,
-                                content=ExtensionsListWidget(
-                                    title="Extensiones a incluir (ej: .py)",
-                                    items=sorted(list(self.state.include_extensions)),
-                                    new_item_value=self.state.new_include_extension,
-                                    on_add=self.controller.add_include_extension,
-                                    on_delete=self.controller.delete_include_extension,
-                                    on_change_new_item=self.controller.on_change_include_text,
-                                    on_submit_new_item=self.controller.add_include_extension
-                                )
-                            ),
-                            ft.Tab(
-                                text="Excluir",
-                                icon=ft.Icons.REMOVE_CIRCLE_OUTLINE,
-                                content=ExtensionsListWidget(
-                                    title="Patrones a excluir (ej: .g.dart)",
-                                    items=sorted(list(self.state.exclude_patterns)),
-                                    new_item_value=self.state.new_exclude_pattern,
-                                    on_add=self.controller.add_exclude_pattern,
-                                    on_delete=self.controller.delete_exclude_pattern,
-                                    on_change_new_item=self.controller.on_change_exclude_text,
-                                    on_submit_new_item=self.controller.add_exclude_pattern
-                                )
-                            )
-                        ],
-                        expand=True
-                    )
-                ],
-                spacing=10,
-            ),
-            expand=5, # 50% width
-            padding=ft.padding.only(right=10)
-        )
 
-        right_panel = ft.Container(
-            content=ft.Column(
+        config = ft.Column(
                 [
                     ft.Text("Configuración de Salida", style=ft.TextThemeStyle.HEADLINE_SMALL),
                     ft.Row([
@@ -108,7 +60,64 @@ class ProjectMapperView(ft.Row):
                 ],
                 spacing=10,
                 scroll=ft.ScrollMode.ADAPTIVE
+            )
+
+        tabs = ft.Tabs(
+                        selected_index=0,
+                        animation_duration=300,
+                        tabs=[
+                            ft.Tab(
+                                text="Configuración",
+                                icon=ft.Icons.ADD_CIRCLE_OUTLINE,
+                                content=config
+                            ),
+                            ft.Tab(
+                                text="Incluir",
+                                icon=ft.Icons.ADD_CIRCLE_OUTLINE,
+                                content=ExtensionsListWidget(
+                                    title="Extensiones a incluir (ej: .py)",
+                                    items=sorted(list(self.state.include_extensions)),
+                                    new_item_value=self.state.new_include_extension,
+                                    on_add=self.controller.add_include_extension,
+                                    on_delete=self.controller.delete_include_extension,
+                                    on_change_new_item=self.controller.on_change_include_text,
+                                    on_submit_new_item=self.controller.add_include_extension
+                                )
+                            ),
+                            ft.Tab(
+                                text="Excluir",
+                                icon=ft.Icons.REMOVE_CIRCLE_OUTLINE,
+                                content=ExtensionsListWidget(
+                                    title="Patrones a excluir (ej: .g.dart)",
+                                    items=sorted(list(self.state.exclude_patterns)),
+                                    new_item_value=self.state.new_exclude_pattern,
+                                    on_add=self.controller.add_exclude_pattern,
+                                    on_delete=self.controller.delete_exclude_pattern,
+                                    on_change_new_item=self.controller.on_change_exclude_text,
+                                    on_submit_new_item=self.controller.add_exclude_pattern
+                                )
+                            )
+                        ],
+                        expand=True
+                    )
+
+        left_panel = ft.Container(
+            content=ft.Column(
+                [
+                    DirectorySelectionWidget(
+                        title="Carpetas a Mapear",
+                        directories=self.state.subdirectories,
+                        on_toggle=self.controller.on_toggle_directory,
+                    )
+                ],
+                spacing=10,
             ),
+            expand=5, # 50% width
+            padding=ft.padding.only(right=10)
+        )
+
+        right_panel = ft.Container(
+            content=tabs,
             expand=5, # 50% width
             padding=ft.padding.only(left=10)
         )
