@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Set
+from typing import Optional, Set, Dict
 
 class ProjectMapperState(BaseModel):
     project_dir_path: Optional[str] = None
@@ -11,3 +11,4 @@ class ProjectMapperState(BaseModel):
     new_exclude_pattern: str = ""
     is_loading: bool = False
     status_text: str = ""
+    subdirectories: Dict[str, bool] = Field(default_factory=dict)

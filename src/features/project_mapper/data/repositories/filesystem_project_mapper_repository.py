@@ -1,11 +1,17 @@
 from pathlib import Path
 import os
-from typing import Set, Callable, Optional
+from typing import Set, Callable, Optional, List
 
 from src.features.project_mapper.domain.models.mapping_config_model import MappingConfig
 from src.features.project_mapper.domain.repositories.i_project_mapper_repository import IProjectMapperRepository
 
 class FilesystemProjectMapperRepository(IProjectMapperRepository):
+    def get_subdirectories(self, path: str) -> List[str]:
+        root_path = Path(path)
+        if not root_path.is_dir():
+            return []
+        return sorted([d.name for d in root_path.iterdir() if d.is_dir()])
+
     def map_project(
         self, 
         config: MappingConfig, 
@@ -30,31 +36,36 @@ class FilesystemProjectMapperRepository(IProjectMapperRepository):
 
             if progress_callback:
                 progress_callback("Recorriendo directorios...")
+            
+            dirs_to_walk = [project_path.joinpath(d) for d in config.selected_dirs]
+            if not dirs_to_walk:
+                dirs_to_walk = [project_path]
 
-            for root, _, files in os.walk(config.project_dir):
-                current_dir_path = Path(root)
-                for filename in files:
-                    item_path = current_dir_path / filename
-                    file_ext_lower = item_path.suffix.lower()
-                    file_name_lower = item_path.name.lower()
+            for dir_path in dirs_to_walk:
+                for root, _, files in os.walk(dir_path):
+                    current_dir_path = Path(root)
+                    for filename in files:
+                        item_path = current_dir_path / filename
+                        file_ext_lower = item_path.suffix.lower()
+                        file_name_lower = item_path.name.lower()
 
-                    included = not include_extensions_set or file_ext_lower in include_extensions_set
-                    excluded = any(file_name_lower.endswith(p) for p in exclude_patterns_set)
+                        included = not include_extensions_set or file_ext_lower in include_extensions_set
+                        excluded = any(file_name_lower.endswith(p) for p in exclude_patterns_set)
 
-                    if included and not excluded:
-                        found_files += 1
-                        relative_path = item_path.relative_to(project_path)
-                        if progress_callback:
-                            progress_callback(f"Mapeando ({found_files}): {relative_path}")
-                        
-                        out_f.write(f"## `{relative_path}`\n\n")
-                        lang_hint = file_ext_lower.lstrip('.')
-                        out_f.write(f"```{lang_hint}\n")
-                        try:
-                            with open(item_path, "r", encoding="utf-8", errors='ignore') as in_f:
-                                content = in_f.read()
-                        except Exception as e:
-                            content = f"Error al leer el archivo: {e}"
-                        out_f.write(content)
-                        out_f.write("\n```\n\n")
+                        if included and not excluded:
+                            found_files += 1
+                            relative_path = item_path.relative_to(project_path)
+                            if progress_callback:
+                                progress_callback(f"Mapeando ({found_files}): {relative_path}")
+                            
+                            out_f.write(f"## `{relative_path}`\n\n")
+                            lang_hint = file_ext_lower.lstrip('.')
+                            out_f.write(f"```{lang_hint}\n")
+                            try:
+                                with open(item_path, "r", encoding="utf-8", errors='ignore') as in_f:
+                                    content = in_f.read()
+                            except Exception as e:
+                                content = f"Error al leer el archivo: {e}"
+                            out_f.write(content)
+                            out_f.write("\n```\n\n")
         return found_files

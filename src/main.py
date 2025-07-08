@@ -10,7 +10,7 @@ from features.project_mapper.data.repositories.filesystem_project_mapper_reposit
 from features.project_mapper.domain.services.project_mapper_service import ProjectMapperService
 from features.project_mapper.presentation.project_mapper_state import ProjectMapperState
 from features.project_mapper.presentation.project_mapper_controller import ProjectMapperController
-from features.project_mapper.presentation.project_mapper_view import ProjectMapperView
+from features.project_mapper.presentation.view.project_mapper_view import ProjectMapperView
 
 from shared.presentation.theme import CORTEX_AI_THEME
 
@@ -18,10 +18,17 @@ def main(page: ft.Page):
     page.title = "Cortex AI - Utilidad de Desarrollo"
     page.vertical_alignment = ft.MainAxisAlignment.START
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    page.window_width = 850
-    page.window_height = 700
+    page.window_width = 1200
+    page.window_height = 800
     page.theme = CORTEX_AI_THEME
     page.dark_theme = CORTEX_AI_THEME
+
+    main_container = ft.Container(
+        width=page.window_width,
+        height=page.window_height,
+        padding=ft.padding.all(20),
+        expand=True,
+    )
 
     # --- INYECCIÓN DE DEPENDENCIAS Y COMPOSICIÓN DE UI ---
 
@@ -60,7 +67,9 @@ def main(page: ft.Page):
         expand=True,
     )
 
-    page.add(tabs)
+    main_container.content = tabs
+
+    page.add(main_container)
     page.update()
 
 if __name__ == "__main__":

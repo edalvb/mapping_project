@@ -1,7 +1,7 @@
 import flet as ft
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Set
 
 from src.features.project_mapper.domain.models.mapping_config_model import MappingConfig
 from src.features.project_mapper.domain.services.project_mapper_service import ProjectMapperService
@@ -22,6 +22,14 @@ class ProjectMapperController:
         self._output_dir_picker = ft.FilePicker(on_result=self._on_output_dir_result)
         self.page.overlay.extend([self._project_dir_picker, self._output_dir_picker])
 
+    def _load_subdirectories(self, path: str):
+        try:
+            dirs = self.service.get_subdirectories(path)
+            self.state.subdirectories = {d: True for d in dirs}
+        except Exception as e:
+            self.state.subdirectories = {}
+            show_dialog(self.page, "Error al leer subdirectorios", str(e))
+
     def _on_project_dir_result(self, e: ft.FilePickerResultEvent):
         if e.path:
             self.state.project_dir_path = e.path
@@ -29,6 +37,7 @@ class ProjectMapperController:
             self.state.output_filename = f"{project_folder_name}.md"
             if not self.state.output_dir_path:
                 self.state.output_dir_path = str(Path.cwd())
+            self._load_subdirectories(e.path)
         if self.view:
             self.view.update_view()
 
@@ -43,6 +52,13 @@ class ProjectMapperController:
 
     def pick_output_dir(self, e):
         self._output_dir_picker.get_directory_path(dialog_title="Seleccionar carpeta de salida")
+
+    def on_toggle_directory(self, e):
+        dir_name = e.control.data
+        if dir_name in self.state.subdirectories:
+            self.state.subdirectories[dir_name] = e.control.value
+        if self.view:
+            self.view.update_view()
 
     def on_change_output_filename(self, e):
         self.state.output_filename = e.control.value
@@ -105,8 +121,11 @@ class ProjectMapperController:
         if self.view: self.view.update_view()
 
         output_path = Path(self.state.output_dir_path) / self.state.output_filename
+        selected_dirs: Set[str] = {d for d, checked in self.state.subdirectories.items() if checked}
+
         config = MappingConfig(
             project_dir=self.state.project_dir_path,
+            selected_dirs=selected_dirs,
             include_extensions=self.state.include_extensions,
             exclude_patterns=self.state.exclude_patterns,
             output_file=str(output_path)
