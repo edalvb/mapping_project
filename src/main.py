@@ -7,6 +7,7 @@ from features.file_creator.presentation.file_creator_controller import FileCreat
 from features.file_creator.presentation.file_creator_view import FileCreatorView
 
 from features.project_mapper.data.repositories.filesystem_project_mapper_repository import FilesystemProjectMapperRepository
+from features.project_mapper.data.repositories.gemini_llm_repository import GeminiLLMRepository
 from features.project_mapper.domain.services.project_mapper_service import ProjectMapperService
 from features.project_mapper.presentation.project_mapper_state import ProjectMapperState
 from features.project_mapper.presentation.project_mapper_controller import ProjectMapperController
@@ -30,7 +31,7 @@ def main(page: ft.Page):
         expand=True,
     )
 
-    # --- INYECCIÓN DE DEPENDENCIAS Y COMPOSICIÓN DE UI ---
+    # --- INYECCIÓN DE DEPENDENCIAS ---
 
     # Slice: File Creator
     file_creator_repository = FilesystemFileCreatorRepository()
@@ -42,13 +43,18 @@ def main(page: ft.Page):
 
     # Slice: Project Mapper
     project_mapper_repository = FilesystemProjectMapperRepository()
-    project_mapper_service = ProjectMapperService(project_mapper_repository)
+    gemini_llm_repository = GeminiLLMRepository()
+    project_mapper_service = ProjectMapperService(
+        mapper_repository=project_mapper_repository,
+        llm_repository=gemini_llm_repository
+    )
     project_mapper_state = ProjectMapperState()
     project_mapper_controller = ProjectMapperController(page, project_mapper_state, project_mapper_service)
     project_mapper_view = ProjectMapperView(project_mapper_controller, project_mapper_state)
     project_mapper_controller.view = project_mapper_view
 
-    # Control principal de la UI
+    # --- COMPOSICIÓN DE UI ---
+
     tabs = ft.Tabs(
         selected_index=0,
         animation_duration=300,

@@ -11,12 +11,16 @@ class DirectorySelectionWidget(ft.Column):
         tree_root: Optional[DirectoryNode],
         selected_paths: Set[str],
         on_node_toggle: Callable,
+        on_intelligent_select: Callable,
+        is_busy: bool,
     ):
         super().__init__()
         self.title = title
         self.tree_root = tree_root
         self.selected_paths = selected_paths
         self.on_node_toggle = on_node_toggle
+        self.on_intelligent_select = on_intelligent_select
+        self.is_busy = is_busy
         self.spacing = 8
         self.expand = True
         self.controls = self._build_content()
@@ -29,6 +33,7 @@ class DirectorySelectionWidget(ft.Column):
             value=is_selected,
             on_change=self.on_node_toggle,
             data=node,
+            disabled=self.is_busy,
         )
 
         child_tree = parent_tree.append(checkbox)
@@ -37,9 +42,24 @@ class DirectorySelectionWidget(ft.Column):
             self._build_tree(child_tree, child_node)
 
     def _build_content(self):
+        header = ft.Row(
+            [
+                ft.Text(self.title, style=ft.TextThemeStyle.TITLE_MEDIUM, expand=True),
+                ft.IconButton(
+                    icon=ft.Icons.FAST_REWIND_OUTLINED,
+                    tooltip="Selección Inteligente por IA",
+                    on_click=self.on_intelligent_select,
+                    disabled=self.is_busy,
+                    icon_color=CORTEX_AI_PALETTE.tertiary
+                )
+            ],
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+
         if not self.tree_root:
             return [
-                ft.Text(self.title, style=ft.TextThemeStyle.TITLE_MEDIUM),
+                header,
                 ft.Container(
                     content=ft.Text(
                         "Seleccione un directorio de proyecto para ver las carpetas.", 
@@ -57,7 +77,7 @@ class DirectorySelectionWidget(ft.Column):
         self._build_tree(tree, self.tree_root)
 
         return [
-            ft.Text(self.title, style=ft.TextThemeStyle.TITLE_MEDIUM),
+            header,
             ft.Container(
                 content=ft.Column([tree], scroll=ft.ScrollMode.ADAPTIVE, expand=True),
                 expand=True,
