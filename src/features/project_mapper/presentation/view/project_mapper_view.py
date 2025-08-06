@@ -34,22 +34,32 @@ class ProjectMapperView(ft.Row):
         )
 
         self.controls = [self.left_panel, ft.VerticalDivider(width=1), self.right_panel]
+        
+        # Mantener referencia al widget de selección de directorios
+        self.directory_widget = None
 
     def did_mount(self):
         self.controller.on_view_did_mount()
         self.update_view()
 
-    def update_view(self):
+    def update_view(self, preserve_expansion_state=False):
         is_busy = self.state.is_loading or self.state.is_ai_selecting
 
-        self.left_panel.content = DirectorySelectionWidget(
-            title="Carpetas a Mapear",
-            tree_root=self.state.directory_tree,
-            selected_paths=self.state.selected_dirs,
-            on_node_toggle=self.controller.on_directory_toggle,
-            on_intelligent_select=self.controller.start_intelligent_selection,
-            is_busy=is_busy,
-        )
+        # Si queremos preservar el estado de expansión y ya tenemos el widget
+        if preserve_expansion_state and self.directory_widget:
+            # Solo actualizar las rutas seleccionadas
+            self.directory_widget.update_selected_paths(self.state.selected_paths)
+        else:
+            # Crear nuevo widget (comportamiento original)
+            self.directory_widget = DirectorySelectionWidget(
+                title="Carpetas y Archivos a Mapear",
+                tree_root=self.state.directory_tree,
+                selected_paths=self.state.selected_paths,
+                on_node_toggle=self.controller.on_directory_toggle,
+                on_intelligent_select=self.controller.start_intelligent_selection,
+                is_busy=is_busy,
+            )
+            self.left_panel.content = self.directory_widget
 
         self.right_tabs.selected_index = self.state.right_panel_tab_index
         self.right_tabs.tabs = self._build_right_tabs(is_busy)

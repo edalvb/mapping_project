@@ -1,0 +1,41 @@
+[project]
+name = "cortex_ai_agent"
+version = "0.1.0"
+description = "Agente de Desarrollo de Software Autónomo."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    { name = "Edward Alexis Vásquez Becerra", email = "edalvb@gmail.com" }
+]
+dependencies = [
+  "pyinstaller>=5.10.1",
+  "flet>=0.70.0.dev5103",
+  "pydantic==2.11.5",
+  "pydantic-settings==2.9.1",
+  "python-dotenv==1.0.1",
+  "google-genai==1.24.0"
+]
+
+# --- FLET BUILD CONFIGURATION ---
+[tool.flet]
+# Metadata for the app store listing and package details
+org = "com.edalvb.cortexai"
+product = "CortexAI Agent"
+company = "Edward Alexis Vásquez Becerra"
+copyright = "Copyright (C) 2025 Edward Alexis Vásquez Becerra. All rights reserved."
+
+# --- FLET APP CONFIGURATION ---
+[tool.flet.app]
+path = "."
+module = "main"
+
+[tool.flet.splash]
+color = "#1E293B" # Inverse Surface
+dark_color = "#1E293B"
+web = false # --no-web-splash
+ios = false # --no-ios-splash
+android = false # --no-android-splash
+
+[tool.flet.permissions] # Permisos iniciales, gestionables desde la UI
+
+[tool.flet.flutter.dependencies]

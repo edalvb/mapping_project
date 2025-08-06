@@ -13,7 +13,7 @@ class ProjectMapperState(BaseModel):
     is_loading: bool = False
     status_text: str = ""
     directory_tree: Optional[DirectoryNode] = None
-    selected_dirs: Set[str] = Field(default_factory=set)
+    selected_paths: Set[str] = Field(default_factory=set)
     right_panel_tab_index: int = 0
 
     llm_system_instruction: str = (

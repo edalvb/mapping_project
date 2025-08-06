@@ -58,9 +58,9 @@ class ProjectMapperController:
         try:
             tree = self.service.get_directory_tree(path)
             self.state.directory_tree = tree
-            self.state.selected_dirs.clear()
-            if tree:
-                self.state.selected_dirs.add(tree.path)
+            self.state.selected_paths.clear()
+            # No seleccionar automáticamente el directorio raíz
+            # El usuario debe elegir explícitamente qué seleccionar
         except Exception as e:
             self.state.directory_tree = None
             show_dialog(self.page, "Error al leer directorios", str(e))
@@ -104,21 +104,43 @@ class ProjectMapperController:
         thread.start()
 
     def on_directory_toggle(self, e: ft.ControlEvent):
-        node: Optional[DirectoryNode] = e.control.data.app_data if hasattr(e.control.data, 'app_data') else None
+        # El nodo está directamente en e.control.data 
+        node: Optional[DirectoryNode] = e.control.data
+        if not node: 
+            # Si no encontramos el nodo directamente, podría estar en un checkbox anidado
+            # Buscar en los controles hijos si es un contenedor
+            if hasattr(e.control, 'label') and hasattr(e.control.label, 'controls'):
+                for control in e.control.label.controls:
+                    if isinstance(control, ft.Checkbox) and hasattr(control, 'data') and control.data:
+                        node = control.data
+                        break
+        
         if not node: return
 
         is_selected = e.control.value
-        paths_to_change: Set[str] = set()
-        q = [node]
-        while q: 
-            curr = q.pop(0)
-            paths_to_change.add(curr.path)
-            q.extend(curr.children)
         
-        if is_selected: self.state.selected_dirs.update(paths_to_change)
-        else: self.state.selected_dirs.difference_update(paths_to_change)
+        if node.is_directory:
+            # Para directorios, seleccionar/deseleccionar recursivamente todos los hijos
+            paths_to_change: Set[str] = set()
+            q = [node]
+            while q: 
+                curr = q.pop(0)
+                paths_to_change.add(curr.path)
+                q.extend(curr.children)
+            
+            if is_selected: 
+                self.state.selected_paths.update(paths_to_change)
+            else: 
+                self.state.selected_paths.difference_update(paths_to_change)
+        else:
+            # Para archivos, solo seleccionar/deseleccionar el archivo específico
+            if is_selected:
+                self.state.selected_paths.add(node.path)
+            else:
+                self.state.selected_paths.discard(node.path)
         
-        if self.view: self.view.update_view()
+        # Actualizar la vista preservando el estado de expansión
+        if self.view: self.view.update_view(preserve_expansion_state=True)
 
     def add_include_extension(self, e):
         ext = self.state.new_include_extension.strip().lower()
@@ -160,7 +182,7 @@ class ProjectMapperController:
         if self.view: self.view.update_view()
 
         output_path = Path(self.state.output_dir_path) / self.state.output_filename
-        config = MappingConfig(project_dir=self.state.project_dir_path, selected_dirs=self.state.selected_dirs, include_extensions=self.state.include_extensions, exclude_patterns=self.state.exclude_patterns, output_file=str(output_path))
+        config = MappingConfig(project_dir=self.state.project_dir_path, selected_paths=self.state.selected_paths, include_extensions=self.state.include_extensions, exclude_patterns=self.state.exclude_patterns, output_file=str(output_path))
 
         try:
             found_files = self.service.execute_mapping_to_file(config, self._update_progress)
@@ -203,7 +225,7 @@ class ProjectMapperController:
 
             llm_config = LLMConfig(system_instruction=self.state.llm_system_instruction, objective=self.state.llm_objective, model_name=self.state.selected_llm_model, api_key=self.state.llm_api_key)
             suggested_paths = self.service.get_intelligent_folder_selection(llm_config, map_content)
-            self.state.selected_dirs = suggested_paths
+            self.state.selected_paths = suggested_paths
 
             show_snackbar(self.page, "Selección de carpetas por IA completada.")
             self.state.ai_status_text = ""

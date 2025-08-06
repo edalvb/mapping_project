@@ -21,14 +21,35 @@ class FilesystemProjectMapperRepository(IProjectMapperRepository):
             node = DirectoryNode(
                 name=current_path.name if node_path_str else relative_root.name,
                 path=node_path_str,
+                is_directory=True,
                 parent=parent
             )
             
             try:
-                children = sorted(current_path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
-                for item in children:
-                    if item.is_dir() and item.name not in self.EXCLUDED_DIRS:
-                        node.children.append(build_tree(item, relative_root, parent=node))
+                # Separar archivos y directorios
+                items = list(current_path.iterdir())
+                directories = [item for item in items if item.is_dir() and item.name not in self.EXCLUDED_DIRS]
+                files = [item for item in items if item.is_file()]
+                
+                # Ordenar: primero directorios, luego archivos, ambos alfabéticamente
+                all_items = sorted(directories, key=lambda p: p.name.lower()) + sorted(files, key=lambda p: p.name.lower())
+                
+                for item in all_items:
+                    if item.is_dir():
+                        # Agregar directorio
+                        child_node = build_tree(item, relative_root, parent=node)
+                        node.children.append(child_node)
+                    else:
+                        # Agregar archivo
+                        file_path_str = item.relative_to(relative_root).as_posix()
+                        file_node = DirectoryNode(
+                            name=item.name,
+                            path=file_path_str,
+                            is_directory=False,
+                            parent=node
+                        )
+                        node.children.append(file_node)
+                        
             except OSError:
                 pass
             return node
@@ -37,36 +58,88 @@ class FilesystemProjectMapperRepository(IProjectMapperRepository):
 
     def _get_files_to_process(self, config: MappingConfig) -> List[Path]:
         project_path = Path(config.project_dir)
-        selected_dirs = config.selected_dirs
-        is_full_scan = not selected_dirs
+        selected_paths = config.selected_paths
+        
+        # Si no hay selecciones, no procesar nada
+        # El usuario debe seleccionar explícitamente qué quiere incluir
+        if not selected_paths:
+            return []
 
         all_files = set()
 
-        for root, dirs, files in os.walk(project_path, topdown=True):
-            dirs[:] = [d for d in dirs if d not in self.EXCLUDED_DIRS]
+        # Separar archivos individuales de directorios seleccionados
+        selected_files = set()
+        selected_directories = set()
+        
+        for path in selected_paths:
+            # Limpiar paths vacíos que pueden causar problemas
+            if path == "":
+                # Path vacío representa el directorio raíz
+                selected_directories.add("")
+                continue
+                
+            full_path = project_path / path
+            if full_path.is_file():
+                selected_files.add(path)
+            elif full_path.is_dir():
+                selected_directories.add(path)
 
-            if is_full_scan:
+        # Agregar archivos individuales seleccionados
+        for file_path_str in selected_files:
+            file_path = project_path / file_path_str
+            if file_path.exists() and file_path.is_file():
+                all_files.add(file_path)
+
+        # Si se seleccionó el directorio raíz (path vacío), incluir todo
+        if "" in selected_directories:
+            for root, dirs, files in os.walk(project_path, topdown=True):
+                dirs[:] = [d for d in dirs if d not in self.EXCLUDED_DIRS]
                 for filename in files:
                     all_files.add(Path(root) / filename)
-                continue
+            return sorted(list(all_files))
 
+        # Procesar directorios seleccionados (excluyendo el raíz)
+        selected_directories.discard("")  # Remover path vacío si existe
+        
+        for root, dirs, files in os.walk(project_path, topdown=True):
+            dirs[:] = [d for d in dirs if d not in self.EXCLUDED_DIRS]
+            
             current_path_str = Path(root).relative_to(project_path).as_posix()
             if current_path_str == '.':
                 current_path_str = ''
 
-            should_add_files = any(
-                current_path_str == sel_dir or current_path_str.startswith(sel_dir + '/')
-                for sel_dir in selected_dirs
+            # Verificar si el directorio actual está seleccionado
+            is_directory_selected = any(
+                current_path_str == sel_dir or 
+                (sel_dir and current_path_str.startswith(sel_dir + '/'))
+                for sel_dir in selected_directories
             )
-            if should_add_files:
-                for filename in files:
-                    all_files.add(Path(root) / filename)
 
-            is_potential_ancestor = any(
-                sel_dir.startswith(current_path_str)
-                for sel_dir in selected_dirs
+            if is_directory_selected:
+                # Si el directorio está seleccionado, verificar cada archivo individualmente
+                for filename in files:
+                    file_path = Path(root) / filename
+                    file_path_str = file_path.relative_to(project_path).as_posix()
+                    
+                    # LÓGICA FINAL CORRECTA:
+                    # En el controlador:
+                    # - Seleccionar directorio → agrega directorio + todos sus archivos a selected_paths
+                    # - Deseleccionar archivo específico → quita solo ese archivo de selected_paths
+                    # 
+                    # Por tanto aquí solo necesitamos verificar:
+                    # ¿Está este archivo específico en selected_paths?
+                    
+                    if file_path_str in selected_paths:
+                        all_files.add(file_path)
+            
+            # Verificar si necesitamos continuar explorando subdirectorios
+            should_continue = any(
+                sel_dir.startswith(current_path_str + '/') if current_path_str else sel_dir
+                for sel_dir in selected_directories
+                if sel_dir  # Ignorar paths vacíos
             )
-            if not is_potential_ancestor:
+            
+            if not should_continue:
                 dirs.clear()
 
         return sorted(list(all_files))

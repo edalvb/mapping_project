@@ -5,6 +5,7 @@ from typing import List, Optional
 class DirectoryNode(BaseModel):
     name: str
     path: str
+    is_directory: bool = True
     children: List[DirectoryNode] = Field(default_factory=list)
     parent: Optional[DirectoryNode] = None
 
