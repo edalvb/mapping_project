@@ -64,7 +64,8 @@ class ProjectMapperView(ft.Row):
         self.right_tabs.selected_index = self.state.right_panel_tab_index
         self.right_tabs.tabs = self._build_right_tabs(is_busy)
 
-        if self.page: self.page.update()
+        if self.page: 
+            self.page.update()
 
     def _build_config_panel(self, is_busy):
         return ft.Column(

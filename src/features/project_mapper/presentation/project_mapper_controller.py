@@ -115,7 +115,8 @@ class ProjectMapperController:
                         node = control.data
                         break
         
-        if not node: return
+        if not node: 
+            return
 
         is_selected = e.control.value
         
@@ -140,7 +141,8 @@ class ProjectMapperController:
                 self.state.selected_paths.discard(node.path)
         
         # Actualizar la vista preservando el estado de expansión
-        if self.view: self.view.update_view(preserve_expansion_state=True)
+        if self.view: 
+            self.view.update_view(preserve_expansion_state=True)
 
     def add_include_extension(self, e):
         ext = self.state.new_include_extension.strip().lower()

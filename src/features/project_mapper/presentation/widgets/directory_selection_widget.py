@@ -31,32 +31,61 @@ class DirectorySelectionWidget(ft.Column):
 
     def update_selected_paths(self, new_selected_paths: set):
         """Actualiza solo las rutas seleccionadas sin reconstruir el widget completo"""
+        old_selected_paths = self.selected_paths.copy()
         self.selected_paths = new_selected_paths
-        # Actualizar todos los checkboxes sin reconstruir el árbol
-        self._update_checkbox_states(self.controls)
         
-        # Actualizar la página
-        if self.page:
-            self.page.update()
+        # Identificar qué cambió
+        paths_added = new_selected_paths - old_selected_paths
+        paths_removed = old_selected_paths - new_selected_paths
+        
+        # Si hay cambios en la selección, actualizar checkboxes
+        if paths_added or paths_removed:
+            # Intentar actualizar checkboxes sin reconstruir
+            self._update_checkbox_states(self.controls)
+            
+            # Solo actualizar la página
+            if self.page:
+                self.page.update()
+        else:
+            # Si no hay cambios, solo actualizar la página
+            if self.page:
+                self.page.update()
 
     def _update_checkbox_states(self, controls):
         """Recursivamente actualiza el estado de los checkboxes en todos los controles"""
         for control in controls:
+            # Caso 1: Control es directamente un Checkbox
             if isinstance(control, ft.Checkbox) and hasattr(control, 'data') and control.data:
-                # Es un checkbox de selección con data del nodo
                 node = control.data
                 control.value = node.path in self.selected_paths
+            
+            # Caso 2: Control tiene una lista de controles anidados
             elif hasattr(control, 'controls') and control.controls:
-                # Es un contenedor con más controles, buscar recursivamente
                 self._update_checkbox_states(control.controls)
+            
+            # Caso 3: Control es un Container con contenido
             elif hasattr(control, 'content') and control.content:
-                # Es un Container con contenido
-                if hasattr(control.content, 'controls'):
-                    self._update_checkbox_states(control.content.controls)
-                elif isinstance(control.content, ft.Checkbox) and hasattr(control.content, 'data'):
-                    node = control.content.data
-                    if node:
-                        control.content.value = node.path in self.selected_paths
+                content = control.content
+                
+                # Caso 3a: El contenido es otro control con controles anidados
+                if hasattr(content, 'controls') and content.controls:
+                    self._update_checkbox_states(content.controls)
+                
+                # Caso 3b: El contenido es directamente un Checkbox
+                elif isinstance(content, ft.Checkbox) and hasattr(content, 'data') and content.data:
+                    node = content.data
+                    content.value = node.path in self.selected_paths
+                
+                # Caso 3c: El contenido es un Row/Column que puede tener más controles
+                elif hasattr(content, 'controls') and content.controls:
+                    self._update_checkbox_states(content.controls)
+            
+            # Caso 4: Verificar si el control tiene data directamente (caso TreeView)
+            elif hasattr(control, 'data') and hasattr(control.data, '__controls'):
+                # Buscar en los controles del TreeView
+                tree_view = control.data
+                if hasattr(tree_view, '__controls'):
+                    self._update_checkbox_states(tree_view.__controls)
 
     def _build_tree(self, parent_tree: TreeView, node: DirectoryNode):
         is_selected = node.path in self.selected_paths
@@ -176,8 +205,36 @@ class DirectorySelectionWidget(ft.Column):
         # Actualizar solo el control del botón primero
         e.control.update()
         
-        # Luego hacer una actualización más conservadora
-        self._conservative_update()
+        # Para cambios de expansión, usar actualización conservadora
+        self._update_tree_structure()
+
+    def _update_tree_structure(self):
+        """Actualiza solo la estructura del árbol preservando la posición de scroll"""
+        # Guardar una referencia al control principal de scroll
+        main_scroll_container = None
+        for control in self.controls:
+            if (hasattr(control, 'content') and 
+                hasattr(control.content, 'controls') and
+                hasattr(control.content, 'scroll')):
+                main_scroll_container = control.content
+                break
+        
+        # Reconstruir solo el contenido del árbol, no todo el widget
+        if self.tree_root and main_scroll_container:
+            # Crear nuevo árbol
+            new_tree = TreeView(auto_collapse=True, expand=True, spacing=0)
+            self._build_tree(new_tree, self.tree_root)
+            
+            # Reemplazar solo el contenido del árbol en el contenedor de scroll
+            if hasattr(main_scroll_container, 'controls'):
+                main_scroll_container.controls = [new_tree]
+                
+                # Actualizar solo el contenedor de scroll
+                if self.page:
+                    main_scroll_container.update()
+        else:
+            # Fallback: usar conservative update
+            self._conservative_update()
 
     def _conservative_update(self):
         """Actualización conservadora que minimiza el desplazamiento"""
